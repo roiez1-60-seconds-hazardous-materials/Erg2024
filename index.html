@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ERG 2024 Risk Assessment - Ultimate V5 (IDW Analysis)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #FF3B30 0%, #FF9500 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.6);
+            --text-main: #1C1C1E;
+            --text-secondary: #8E8E93;
+            --ios-blue: #007AFF;
+            --ios-green: #34C759;
+            --shadow-soft: 0 8px 32px 0 rgba(0, 0, 0, 0.12);
+            --radius-xl: 20px;
+            --radius-md: 12px;
+        }
+
+        body {
+            font-family: 'Heebo', sans-serif;
+            margin: 0; padding: 0;
+            height: 100vh; width: 100vw;
+            overflow: hidden;
+            background-color: #f2f2f7;
+        }
+
+        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+
+        #control-panel {
+            position: absolute;
+            top: 20px; right: 20px;
+            width: 380px;
+            max-height: calc(100vh - 40px);
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-soft);
+            z-index: 1000;
+            display: flex; flex-direction: column;
+            overflow-y: auto; overflow-x: hidden;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        header { margin-bottom: 15px; text-align: center; }
+        h1 {
+            font-weight: 800; font-size: 1.4rem; margin: 0;
+            line-height: 1.2;
+            background: -webkit-linear-gradient(45deg, #1c1c1e, #48484a);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        
+        .section-label {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--text-secondary); margin-bottom: 8px; margin-top: 18px; font-weight: 600;
+            border-bottom: 1px solid #e5e5ea; padding-bottom: 4px;
+        }
+        .row { display: flex; gap: 10px; margin-bottom: 10px; }
+
+        .tool-btn {
+            flex: 1; background: white; color: var(--ios-blue);
+            border: 1px solid rgba(0,122,255,0.15);
+            padding: 10px; border-radius: var(--radius-md);
+            font-size: 0.9rem; font-weight: 500;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+            transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .tool-btn:active { transform: scale(0.97); background: #f0f0f0; }
+
+        .btn-primary {
+            width: 100%; background: var(--primary-gradient); color: white;
+            border: none; padding: 16px; font-size: 1.1rem; font-weight: 700;
+            border-radius: var(--radius-xl); cursor: pointer; margin-top: 25px;
+            box-shadow: 0 4px 15px rgba(255, 59, 48, 0.25);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-primary:active { transform: scale(0.98); }
+
+        .btn-secondary {
+            width: 100%; background: white; color: var(--text-main);
+            border: 1px solid #E5E5EA; padding: 12px; font-size: 0.95rem; font-weight: 600;
+            border-radius: var(--radius-md); cursor: pointer; margin-top: 10px;
+            display: none; 
+        }
+
+        .btn-whatsapp {
+            background: #25D366; color: white; border: none;
+            margin-top: 8px; display: none; /* hidden until calc */
+        }
+
+        input[type="text"], select, input[type="number"] {
+            width: 100%; padding: 12px 14px;
+            font-family: 'Heebo', sans-serif; font-size: 1rem;
+            border: 1px solid #E5E5EA; border-radius: var(--radius-md);
+            background: #fff; box-sizing: border-box;
+            margin-bottom: 5px;
+        }
+        input[type="text"]:focus, select:focus { outline: none; border-color: var(--ios-blue); }
+
+        .address-group { display: flex; gap: 5px; margin-bottom: 10px; }
+        .address-group input { margin-bottom: 0; }
+        
+        .autocomplete-wrapper { position: relative; }
+        #material-list {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border-radius: var(--radius-md);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            max-height: 250px; overflow-y: auto; z-index: 2000;
+            display: none; margin-top: 6px; border: 1px solid #eee;
+        }
+        .mat-item { padding: 12px 16px; border-bottom: 1px solid #f9f9f9; cursor: pointer; font-size: 0.9rem; }
+        .mat-item:hover { background: #f2f2f7; }
+        .mat-un { color: #FF3B30; font-weight: 700; margin-left: 6px; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 10px 0; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 28px; width: 28px;
+            border-radius: 50%; background: #FFFFFF;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer; margin-top: -12px; border: 0.5px solid rgba(0,0,0,0.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer;
+            background: linear-gradient(to left, #E5E5EA 0%, #007AFF 50%, #E5E5EA 100%);
+            border-radius: 2px;
+        }
+        .wind-val-display { text-align: center; font-weight: 600; color: #1C1C1E; margin-top: 4px; }
+
+        .special-options { 
+            background: #F2F2F7; padding: 10px; border-radius: var(--radius-md); 
+            margin-top: 10px; display: none; border: 1px solid #E5E5EA;
+        }
+        
+        #water-checkbox-wrapper, #auto-wind-wrapper, #monitoring-wrapper {
+            display: flex; align-items: center; margin-top: 10px; font-size: 0.9rem; cursor: pointer; gap: 10px;
+        }
+        
+        input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+
+        .warning-box {
+            background-color: #FFF5F5; color: #D70015;
+            font-size: 0.8rem; padding: 12px; border-radius: var(--radius-md);
+            margin-top: 15px; display: none; line-height: 1.4; border: 1px solid #FFDCDC;
+        }
+
+        #results-container {
+            margin-top: 20px; background: white;
+            border-radius: var(--radius-md); padding: 16px;
+            display: none; border-right: 4px solid #34C759;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .res-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.95rem; }
+        .res-label { color: var(--text-secondary); }
+        .res-data { font-weight: 700; color: #1C1C1E; }
+
+        /* Population Info Box */
+        #pop-info {
+            background: #eef2ff; border: 1px solid #cbd5e1;
+            padding: 10px; border-radius: var(--radius-md); margin-top: 10px;
+            font-size: 0.85rem; display: none;
+        }
+        .pop-val { font-weight: bold; color: #007AFF; font-size: 1.1rem; }
+        
+        #pop-source-badge {
+            font-size: 0.65rem; background: #e0e0e0; color: #555;
+            padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block;
+        }
+
+        /* Monitoring Mode Styles */
+        .monitoring-active { border: 2px solid #34C759 !important; background: #f0fff4 !important; }
+        #monitoring-controls { display: none; background: #f9f9f9; padding: 10px; border-radius: var(--radius-md); margin-top: 10px; border: 1px solid #eee; }
+        
+        .legend-scale {
+            display: flex; margin-top: 5px; font-size: 0.7rem;
+        }
+        .legend-item { flex: 1; text-align: center; color: white; padding: 2px; }
+
+        .spinner {
+            width: 14px; height: 14px; border: 2px solid rgba(0,122,255,0.2);
+            border-top: 2px solid var(--ios-blue); border-radius: 50%;
+            animation: spin 0.8s linear infinite; display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 600px) {
+            #control-panel {
+                top: auto; bottom: 0; left: 0; right: 0; width: 100%;
+                max-height: 75vh; border-radius: 24px 24px 0 0;
+                padding-bottom: 40px;
+            }
+        }
+        
+        .leaflet-control-layers { 
+            border-radius: 8px; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="control-panel">
+    <header>
+        <h1>כלי לביצוע הע"ס ראשונית<br>מבוסס ERG2024</h1>
+    </header>
+
+    <div class="section-label">מיקום ונתוני סביבה</div>
+    <div class="row">
+        <button class="tool-btn" onclick="getUserLocation()"><span>📍</span> מיקום שלי</button>
+        <button class="tool-btn" onclick="getRealTimeWind()"><div class="spinner" id="wind-loader"></div><span>💨</span> נתוני רוח</button>
+    </div>
+    
+    <label id="auto-wind-wrapper">
+        <input type="checkbox" id="autoWindToggle" onchange="toggleAutoWind()">
+        <span>עדכון נתוני רוח אוטומטי (כל דקה)</span>
+    </label>
+
+    <div class="address-group" style="margin-top:10px;">
+        <input type="text" id="addr-city" placeholder="עיר/יישוב" style="flex:2">
+        <input type="text" id="addr-street" placeholder="רחוב" style="flex:2">
+        <input type="text" id="addr-num" placeholder="מס'" style="flex:1">
+    </div>
+    <button class="tool-btn" style="width:100%" onclick="geocodeAddress()">🔎 אתר לפי כתובת</button>
+    
+    <div id="weather-status" style="text-align:center; font-size:0.75rem; color:#8E8E93; height:18px; margin-top:5px;"></div>
+
+    <div class="section-label">איתור חומר</div>
+    <div class="autocomplete-wrapper">
+        <input type="text" id="searchInput" placeholder="חפש מס' או''ם או שם חומר..." autocomplete="off">
+        <div id="material-list"></div>
+    </div>
+    <div id="selected-material-info" style="font-size:0.9rem; color:#FF3B30; font-weight:600; margin-top:8px; min-height:1.2em;"></div>
+
+    <div class="section-label">נתוני אירוע</div>
+    <div class="row">
+        <select id="spillSize" onchange="checkTable3Visibility()">
+            <option value="small">שפך מועט (קטן)</option>
+            <option value="large">שפך רב (גדול)</option>
+        </select>
+        <select id="timeDay">
+            <option value="day">יום</option>
+            <option value="night">לילה</option>
+        </select>
+    </div>
+
+    <label id="water-checkbox-wrapper" style="display:none;">
+        <input type="checkbox" id="waterSpill" onchange="checkWaterReaction()">
+        נשפך לתוך מקור מים?
+    </label>
+    
+    <div id="water-warning" class="warning-box">
+        <strong>💧 תוצרי הגז הרעילים הנפלטים במגע עם מים:</strong> <span id="water-gas-msg"></span>
+    </div>
+
+    <div id="table3-options" class="special-options">
+        <div style="font-weight:700; font-size:0.8rem; margin-bottom:5px; color:#FF9500;">אופציות טבלה 3 (גזים רעילים בשפך רב)</div>
+        <select id="containerType"></select>
+        <select id="windSpeed">
+            <option value="low">רוח חרישית (עד 3 מטר/שניה)</option>
+            <option value="medium">רוח קלה (3-6 מטר/שניה)</option>
+            <option value="high">רוח מתונה ומעלה (מעל 6 מטר/שניה)</option>
+        </select>
+    </div>
+
+    <div class="section-label">כיוון הרוח (מאיפה היא נושבת)</div>
+    <input type="range" id="windDir" min="0" max="360" value="0">
+    <div class="wind-val-display" id="windValue">0° (צפון)</div>
+
+    <button class="btn-primary" onclick="calculateAndDraw()">הצג מפת הע"ס וניתוח סיכונים</button>
+
+    <div id="results-container">
+        <div class="res-row"><span class="res-label">מרחק בידוד</span><span class="res-data" id="res-iso" style="color:#FF3B30;">-</span></div>
+        <div class="res-row"><span class="res-label">מרחק פעולות מגן</span><span class="res-data" id="res-protect" style="color:#FF9500;">-</span></div>
+        
+        <div id="pop-info">
+            <div style="margin-bottom:5px; border-bottom:1px solid #ccc; padding-bottom:3px;">📊 <strong>ניתוח אוכלוסייה (מבוסס למ"ס)</strong></div>
+            <div>שטח בסיכון: <span id="pop-area">0</span> קמ"ר</div>
+            <div style="margin-top:5px; display:flex; align-items:center; gap:5px;">
+                <span style="font-size:0.75rem;">צפיפות (נפש/קמ"ר):</span>
+                <input type="number" id="pop-density" value="0" style="width:60px; padding:2px; height:20px; font-size:0.8rem;" onchange="updatePopulationEst()">
+            </div>
+            <div id="pop-source-badge">מקור: שטח פתוח / ללא שיוך</div>
+            <div style="margin-top:5px;">אוכלוסייה מוערכת: <span class="pop-val" id="pop-count">-</span></div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <button id="btn-kml" class="btn-secondary" onclick="exportKML()">📥 ייצוא KML</button>
+        <button id="btn-wa" class="btn-secondary btn-whatsapp" onclick="shareWhatsApp()">📱 שיתוף בוואטסאפ</button>
+    </div>
+
+    <div class="section-label">ניטור וניתוח עננה (IDW)</div>
+    <button id="btn-monitor" class="tool-btn" style="width:100%" onclick="toggleMonitoringMode()">📡 הפעל מצב הזנת גלאים</button>
+    <div id="monitoring-controls">
+        <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:5px;">
+            לחץ על המפה להוספת מדידה (PPM).<br>
+            <strong style="color:#d00;">חובה להזין לפחות 3 נקודות ליצירת פוליגון.</strong>
+        </div>
+        <div class="legend-scale">
+            <div class="legend-item" style="background:rgba(0, 255, 0, 0.6); color:black;">נמוך</div>
+            <div class="legend-item" style="background:rgba(255, 255, 0, 0.6); color:black;">בינוני</div>
+            <div class="legend-item" style="background:rgba(255, 165, 0, 0.6);">גבוה</div>
+            <div class="legend-item" style="background:rgba(255, 0, 0, 0.6);">קיצוני</div>
+        </div>
+        <button class="tool-btn" style="font-size:0.8rem; padding:6px; margin-top:5px;" onclick="clearHeatmap()">🗑️ נקה גלאים</button>
+    </div>
+
+    <div id="table3-warning" class="warning-box">
+        <strong>⚠️ שים לב:</strong> הנתונים נלקחו מטבלה 3 (גזים רעילים). וודא שסוג המכל ומהירות הרוח נכונים.
+    </div>
+</div>
+
+<script>
+    // --- CBS ISRAEL POPULATION DENSITY DATABASE ---
+    const cbsDensities = {
+        "bnei brak": 28000, "givatayim": 18000, "bat yam": 15500, "tel aviv": 8800, "jerusalem": 7500, 
+        "netanya": 7800, "ashdod": 4900, "rishon lezion": 4500, "petah tikva": 7200, "holon": 10200,
+        "haifa": 4500, "ramat gan": 10000, "beer sheva": 1800, "ashkelon": 3300, "rehovot": 6500,
+        "beit shemesh": 4500, "kfar saba": 7200, "herzliya": 4600, "hadera": 2000, "modiin": 2000,
+        "nazareth": 3000, "lod": 6600, "ramla": 6500, "raanana": 5000, "giv'at shmuel": 10500,
+        "kiryat ono": 9200, "kiryat motzkin": 11000, "or yehuda": 5500, "ness ziona": 3200,
+        "eilat": 550, "tiberias": 2800, "nahariya": 5500, "dimona": 200, "arad": 250, "katzrin": 600,
+        "sderot": 4500, "kiryat shmona": 1500, "yavne": 3000, "hod hasharon": 3300, "rosh haayin": 2500,
+        "default_city": 3000, "village": 500, "moshav": 400, "kibbutz": 300
+    };
+
+    // --- HAZMAT DATABASE (ERG TABLE 1) ---
+     const hazmatDB = [
+{un:"---",nameHe:"גורמים לשלפוחיות (לואיסייט, חרדל)",smallIso:200,smallDay:0.4,smallNight:0.4,largeIso:200,largeDay:1.6,largeNight:1.6},
+{un:"---",nameHe:"גורמים להפרעות בדם (ארסין, ציאניד)",smallIso:400,smallDay:0.9,smallNight:0.9,largeIso:400,largeDay:3.2,largeNight:3.2},
+{un:"---",nameHe:"גורמים לחנק (פוסגן)",smallIso:100,smallDay:0.3,smallNight:0.3,largeIso:100,largeDay:1.1,largeNight:1.1},
+{un:"---",nameHe:"גורמים למניעת הכרה (BUZZ)",smallIso:1000,smallDay:1.7,smallNight:1.7,largeIso:1000,largeDay:7.8,largeNight:7.8},
+{un:"---",nameHe:"גורמי עצבים (סארין, VX)",smallIso:400,smallDay:1,smallNight:1,largeIso:400,largeDay:4,largeNight:4},
+{un:"---",nameHe:"גז מדמיע",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:30,largeDay:0.6,largeNight:0.6},
+{un:"---",nameHe:"גורמים להקאה",smallIso:100,smallDay:0.6,smallNight:0.6,largeIso:100,largeDay:1.1,largeNight:1.1},
+{un:"1005",nameHe:"אמוניה אל מימית",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:null,largeDay:null,largeNight:null},
+{un:"1008",nameHe:"בורון טריפלואוריד",smallIso:30,smallDay:0.2,smallNight:0.7,largeIso:400,largeDay:2.4,largeNight:4.7},
+{un:"1008",nameHe:"בורון טריפלואוריד, דחוס",smallIso:30,smallDay:0.2,smallNight:0.7,largeIso:400,largeDay:2.4,largeNight:4.7},
+{un:"1016",nameHe:"פחמן חד חמצני דחוס",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:200,largeDay:1.2,largeNight:3.9},
+{un:"1017",nameHe:"כלור",smallIso:60,smallDay:0.3,smallNight:1.5,largeIso:null,largeDay:null,largeNight:null},
+{un:"1026",nameHe:"ציאנוגן",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.3,largeNight:1.1},
+{un:"1040",nameHe:"אתילן אוקסיד",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:null,largeDay:null,largeNight:null},
+{un:"1040",nameHe:"אתילן אוקסיד עם חנקן",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:null,largeDay:null,largeNight:null},
+{un:"1045",nameHe:"פלואור דחוס",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:100,largeDay:0.5,largeNight:2.3},
+{un:"1048",nameHe:"מימן ברומי אלמיימי",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:150,largeDay:1,largeNight:3.2},
+{un:"1050",nameHe:"מימן כלורי אלמיימי",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:null,largeDay:null,largeNight:null},
+{un:"1051",nameHe:"מימן ציאניד מיוצב",smallIso:60,smallDay:0.2,smallNight:0.7,largeIso:200,largeDay:0.7,largeNight:1.8},
+{un:"1052",nameHe:"מימן פלואורי אלמיימי",smallIso:30,smallDay:0.1,smallNight:0.5,largeIso:null,largeDay:null,largeNight:null},
+{un:"1053",nameHe:"מימן גופרי",smallIso:30,smallDay:0.1,smallNight:0.5,largeIso:400,largeDay:2.4,largeNight:6.3},
+{un:"1061",nameHe:"מתילאמין אלמיימי",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:200,largeDay:0.6,largeNight:2.1},
+{un:"1062",nameHe:"מתיל ברומיד",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:150,largeDay:0.3,largeNight:0.7},
+{un:"1064",nameHe:"מתיל מרקפטאן",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:200,largeDay:1.3,largeNight:3.9},
+{un:"1067",nameHe:"דו חנקן ארבע חמצני",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:400,largeDay:1.4,largeNight:3.3},
+{un:"1067",nameHe:"חנקן דו חמצני",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:400,largeDay:1.4,largeNight:3.3},
+{un:"1069",nameHe:"ניטרוסיל כלוריד",smallIso:30,smallDay:0.2,smallNight:1,largeIso:800,largeDay:4.3,largeNight:9.6},
+{un:"1076",nameHe:"פוסגן",smallIso:100,smallDay:0.6,smallNight:2.5,largeIso:500,largeDay:3,largeNight:9.5},
+{un:"1079",nameHe:"גופרית דו חמצנית",smallIso:100,smallDay:0.6,smallNight:2.6,largeIso:null,largeDay:null,largeNight:null},
+{un:"1082",nameHe:"גז קירור R-1113",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.4,largeNight:0.7},
+{un:"1082",nameHe:"טריפלואורוכלורו אתילן מיוצב",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.4,largeNight:0.7},
+{un:"1092",nameHe:"אקרולאין, מיוצב",smallIso:100,smallDay:1.3,smallNight:3.5,largeIso:600,largeDay:6.8,largeNight:11.1},
+{un:"1093",nameHe:"אקרילוניטריל, מיוצב",smallIso:30,smallDay:0.2,smallNight:0.6,largeIso:100,largeDay:1.3,largeNight:2.3},
+{un:"1098",nameHe:"אליל אלכוהול",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.8,largeNight:1.2},
+{un:"1135",nameHe:"אתילן כלורוהידרין",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"1143",nameHe:"קרוטונאלדהיד",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.7},
+{un:"1143",nameHe:"קרוטונאלדהיד, מיוצב",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.7},
+{un:"1162",nameHe:"דימתיל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.2},
+{un:"1163",nameHe:"דימתיל הידרזין, לא סמטרי",smallIso:30,smallDay:0.2,smallNight:0.5,largeIso:100,largeDay:1,largeNight:1.8},
+{un:"1182",nameHe:"אתיל כלורופורמאט",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.6,largeNight:0.9},
+{un:"1183",nameHe:"אתיל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.5,largeNight:1.5},
+{un:"1185",nameHe:"אתילן אימין, מיוצב",smallIso:30,smallDay:0.2,smallNight:0.5,largeIso:200,largeDay:1,largeNight:1.8},
+{un:"1196",nameHe:"אתיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.5,largeIso:150,largeDay:1.8,largeNight:3.7},
+{un:"1238",nameHe:"מתיל כלורופורמאט",smallIso:30,smallDay:0.2,smallNight:0.5,largeIso:150,largeDay:1.2,largeNight:2.2},
+{un:"1239",nameHe:"מתיל כלורומתיל אתר",smallIso:60,smallDay:0.5,smallNight:1.5,largeIso:300,largeDay:3.4,largeNight:5.7},
+{un:"1242",nameHe:"מתיל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.5,largeNight:1.7},
+{un:"1244",nameHe:"מתיל הידראזין",smallIso:30,smallDay:0.3,smallNight:0.6,largeIso:150,largeDay:1.5,largeNight:2.2},
+{un:"1250",nameHe:"מתיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.6,largeNight:1.9},
+{un:"1251",nameHe:"מתיל ויניל קטון, מיוצב",smallIso:100,smallDay:0.3,smallNight:0.7,largeIso:800,largeDay:1.7,largeNight:2.8},
+{un:"1259",nameHe:"ניקל קרבוניל",smallIso:100,smallDay:1.4,smallNight:5.2,largeIso:1000,largeDay:11,largeNight:11},
+{un:"1295",nameHe:"טריכלורוסילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.5,largeNight:1.5},
+{un:"1298",nameHe:"טרימתיל כלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1},
+{un:"1305",nameHe:"ויניל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.3},
+{un:"1340",nameHe:"זרחן פנטאסולפיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:1},
+{un:"1360",nameHe:"סידן פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:200,largeDay:0.8,largeNight:2.7},
+{un:"1380",nameHe:"פנטאבורן",smallIso:60,smallDay:0.6,smallNight:2,largeIso:300,largeDay:3,largeNight:6.5},
+{un:"1384",nameHe:"נתרן דיתיוניט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:2.1},
+{un:"1384",nameHe:"נתרן הידרוסולפיט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:2.1},
+{un:"1390",nameHe:"אמידים של מתכת אלקלית (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:60,largeDay:0.5,largeNight:1.8},
+{un:"1397",nameHe:"אלומיניום פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.7,largeIso:400,largeDay:1.6,largeNight:4.7},
+{un:"1419",nameHe:"מגנזיום אלומיניום פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:400,largeDay:1.4,largeNight:4.1},
+{un:"1432",nameHe:"נתרן פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:300,largeDay:1,largeNight:3},
+{un:"1510",nameHe:"טטרא ניטרו מתאן",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:30,largeDay:0.4,largeNight:0.7},
+{un:"1541",nameHe:"אצטון ציאנוהידרין, מיוצב (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.2,largeNight:0.5},
+{un:"1556",nameHe:"מתיל דיכלורו סילאן",smallIso:150,smallDay:1.4,smallNight:2.2,largeIso:300,largeDay:4,largeNight:5.8},
+{un:"1560",nameHe:"ארסניק כלוריד",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:100,largeDay:1,largeNight:1.5},
+{un:"1560",nameHe:"ארסניק טריכלוריד",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:100,largeDay:1,largeNight:1.5},
+{un:"1569",nameHe:"ברומו אצטון",smallIso:30,smallDay:0.4,smallNight:1.2,largeIso:150,largeDay:1.8,largeNight:3.3},
+{un:"1580",nameHe:"כלורופיקרין",smallIso:60,smallDay:0.5,smallNight:1.2,largeIso:200,largeDay:2.4,largeNight:3.7},
+{un:"1581",nameHe:"תערובת כלורופיקרין ומתיל ברומיד",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:300,largeDay:2.1,largeNight:5.9},
+{un:"1582",nameHe:"תערובת כלורופיקרין ומתיל כלוריד",smallIso:30,smallDay:0.1,smallNight:0.5,largeIso:60,largeDay:0.5,largeNight:2.1},
+{un:"1583",nameHe:"תערובת כלורופיקרין, לא צוין אחרת",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:300,largeDay:2.1,largeNight:5.9},
+{un:"1589",nameHe:"ציאנוגן כלוריד, מיוצב",smallIso:300,smallDay:1.9,smallNight:6.6,largeIso:1000,largeDay:11,largeNight:11},
+{un:"1595",nameHe:"דימתיל סולפאט, מיוצב",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.2,largeNight:0.7},
+{un:"1595",nameHe:"דימתיל סולפאט",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.2,largeNight:0.7},
+{un:"1605",nameHe:"אתילן דיברומיד",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.2},
+{un:"1612",nameHe:"תערובת הקסאתיל טטרא פוספאט וגז דחוס",smallIso:100,smallDay:0.8,smallNight:2.7,largeIso:400,largeDay:3.5,largeNight:8.1},
+{un:"1613",nameHe:"חומצה הידורציאנית, תמיסה מימית (<20%)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:100,largeDay:0.5,largeNight:1.1},
+{un:"1614",nameHe:"מימן ציאניד מיוצב, ספוח",smallIso:60,smallDay:0.2,smallNight:0.6,largeIso:150,largeDay:0.5,largeNight:1.5},
+{un:"1647",nameHe:"תערובת מתיל ברומיד ואתילן, נוזל",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:150,largeDay:0.3,largeNight:0.7},
+{un:"1660",nameHe:"חנקן חד חמצני דחוס",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:100,largeDay:0.6,largeNight:2.2},
+{un:"1670",nameHe:"פרכלורו מתיל מרקפטאן",smallIso:30,smallDay:0.3,smallNight:0.4,largeIso:100,largeDay:0.8,largeNight:1.3},
+{un:"1672",nameHe:"פניל קרביל אמין כלוריד",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.7},
+{un:"1680",nameHe:"אשלגן ציאניד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.2,largeNight:0.7},
+{un:"1689",nameHe:"נתרן ציאניד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.2,largeNight:0.9},
+{un:"1695",nameHe:"כלורואצטון מיוצב",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.4,largeNight:0.6},
+{un:"1716",nameHe:"אצטיל ברומיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.7},
+{un:"1717",nameHe:"אצטיל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.7,largeNight:2},
+{un:"1722",nameHe:"אליל כלורו קארבונאט",smallIso:100,smallDay:0.3,smallNight:0.8,largeIso:400,largeDay:1.5,largeNight:2.4},
+{un:"1722",nameHe:"אליל כלורו פורמאט",smallIso:100,smallDay:0.3,smallNight:0.8,largeIso:400,largeDay:1.5,largeNight:2.4},
+{un:"1724",nameHe:"אליל טריכלורו סילאן, מיוצב (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.2},
+{un:"1725",nameHe:"אלומיניום ברומיד, אלמיימי (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.2},
+{un:"1726",nameHe:"אלומיניום כלוריד, אלמיימי (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.5},
+{un:"1728",nameHe:"אמיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.2},
+{un:"1732",nameHe:"אנטימוני פנטאפלואוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:100,largeDay:0.8,largeNight:3},
+{un:"1741",nameHe:"בורון טריכלוריד (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:100,largeDay:0.6,largeNight:1.3},
+{un:"1741",nameHe:"בורון טריכלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:100,largeDay:0.9,largeNight:2.8},
+{un:"1744",nameHe:"ברום",smallIso:60,smallDay:0.8,smallNight:2.4,largeIso:400,largeDay:4.2,largeNight:7.6},
+{un:"1744",nameHe:"תמיסת ברום",smallIso:60,smallDay:0.8,smallNight:2.4,largeIso:400,largeDay:4.2,largeNight:7.6},
+{un:"1745",nameHe:"ברום פנטאפלואוריד (על קרקע)",smallIso:100,smallDay:0.9,smallNight:2.7,largeIso:500,largeDay:5.7,largeNight:10.8},
+{un:"1745",nameHe:"ברום פנטאפלואוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:100,largeDay:0.9,largeNight:3},
+{un:"1746",nameHe:"ברום טריפלואוריד (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:30,largeDay:0.3,largeNight:0.5},
+{un:"1746",nameHe:"ברום טריפלואוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:100,largeDay:0.8,largeNight:2.8},
+{un:"1747",nameHe:"בוטיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.2},
+{un:"1749",nameHe:"כלור טריפלואוריד",smallIso:30,smallDay:0.2,smallNight:1.1,largeIso:300,largeDay:1.4,largeNight:3.7},
+{un:"1752",nameHe:"כלורואצטיל כלוריד (על קרקע)",smallIso:30,smallDay:0.3,smallNight:0.6,largeIso:100,largeDay:1.2,largeNight:1.9},
+{un:"1752",nameHe:"כלורואצטיל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.4},
+{un:"1753",nameHe:"כלורופניל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.5},
+{un:"1754",nameHe:"חומצה כלורוסופונית (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.3},
+{un:"1754",nameHe:"חומצה כלורוסופונית (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.5,largeNight:1.7},
+{un:"1758",nameHe:"כרום אוקסיכלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.3},
+{un:"1762",nameHe:"ציקלוהקסניל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.8},
+{un:"1763",nameHe:"ציקלוהקסיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.8},
+{un:"1765",nameHe:"דיכלורו אצטיל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.5},
+{un:"1766",nameHe:"דיכלורו פניל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.4},
+{un:"1767",nameHe:"דיאתיל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.6},
+{un:"1769",nameHe:"דיפניל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.7},
+{un:"1771",nameHe:"דודציל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.8},
+{un:"1777",nameHe:"חומצה פלואורו סולפונית (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.3},
+{un:"1781",nameHe:"הקסא דציל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.3},
+{un:"1784",nameHe:"הקסיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.9},
+{un:"1799",nameHe:"נוניל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:1},
+{un:"1800",nameHe:"אוקטא דציל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.9},
+{un:"1801",nameHe:"אוקטיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:1},
+{un:"1804",nameHe:"פניל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:1},
+{un:"1806",nameHe:"זרחן פנטאכלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.9},
+{un:"1808",nameHe:"זרחן טריברומיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:1.1},
+{un:"1809",nameHe:"זרחן טריכלורי (על קרקע)",smallIso:30,smallDay:0.2,smallNight:0.6,largeIso:100,largeDay:1.1,largeNight:2},
+{un:"1809",nameHe:"זרחן טריכלורי (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.5,largeNight:1.8},
+{un:"1810",nameHe:"זרחן אוקסיכלוריד (על קרקע)",smallIso:30,smallDay:0.3,smallNight:0.6,largeIso:100,largeDay:1.1,largeNight:1.8},
+{un:"1810",nameHe:"זרחן אוקסיכלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.5,largeNight:1.5},
+{un:"1815",nameHe:"פרופיוניל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.3},
+{un:"1816",nameHe:"פרופיל טריכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.3},
+{un:"1818",nameHe:"סיליקון טטראכלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.6,largeNight:2},
+{un:"1828",nameHe:"גופרית כלוריד (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:60,largeDay:0.3,largeNight:0.4},
+{un:"1828",nameHe:"גופרית כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.7},
+{un:"1829",nameHe:"גופרית תלת חמצנית, מיוצבת",smallIso:60,smallDay:0.4,smallNight:1,largeIso:300,largeDay:2.9,largeNight:6.3},
+{un:"1831",nameHe:"חומצה גופרתית, מעשנת",smallIso:60,smallDay:0.4,smallNight:1,largeIso:300,largeDay:2.9,largeNight:6.3},
+{un:"1834",nameHe:"סולפוריל כלוריד (על קרקע)",smallIso:30,smallDay:0.2,smallNight:0.4,largeIso:60,largeDay:0.8,largeNight:1.5},
+{un:"1834",nameHe:"סולפוריל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:1.1},
+{un:"1836",nameHe:"תיוניל כלוריד (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:30,largeDay:0.3,largeNight:0.5},
+{un:"1836",nameHe:"תיוניל כלוריד (במים)",smallIso:100,smallDay:0.9,smallNight:2.9,largeIso:600,largeDay:7.6,largeNight:11},
+{un:"1838",nameHe:"טיטאניום טטראכלוריד (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:30,largeDay:0.4,largeNight:0.5},
+{un:"1838",nameHe:"טיטאניום טטראכלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:1.2},
+{un:"1859",nameHe:"סיליקון טטראפלואוריד",smallIso:30,smallDay:0.2,smallNight:0.8,largeIso:100,largeDay:0.5,largeNight:1.8},
+{un:"1859",nameHe:"סיליקון טטראפלואוריד, דחוס",smallIso:30,smallDay:0.2,smallNight:0.8,largeIso:100,largeDay:0.5,largeNight:1.8},
+{un:"1892",nameHe:"אתיל דיכלורו ארסין",smallIso:150,smallDay:1.5,smallNight:2.2,largeIso:400,largeDay:5.1,largeNight:6.4},
+{un:"1898",nameHe:"אצטיל יודיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.9},
+{un:"1911",nameHe:"דיבוראן",smallIso:60,smallDay:0.3,smallNight:1.2,largeIso:300,largeDay:1.6,largeNight:4.6},
+{un:"1911",nameHe:"תערובת דיבוראן",smallIso:60,smallDay:0.3,smallNight:1.2,largeIso:300,largeDay:1.6,largeNight:4.6},
+{un:"1923",nameHe:"סידן דיתיוניט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:2.1},
+{un:"1923",nameHe:"סידן הידרוסלפיט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:2.1},
+{un:"1929",nameHe:"אשלגן דיתיוניט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:1.9},
+{un:"1929",nameHe:"אשלגן הידרוסלפיט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:1.9},
+{un:"1931",nameHe:"אבץ דיתיוניט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:1.9},
+{un:"1931",nameHe:"אבץ הידרוסולפיט (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:60,largeDay:0.5,largeNight:1.9},
+{un:"1953",nameHe:"גז דחוס, רעיל, דליק, לא צויין אחרת",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"1955",nameHe:"גז דחוס רעיל",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"1955",nameHe:"תרכובת פוספאט אורגנית עם גז דחוס",smallIso:100,smallDay:1,smallNight:3.4,largeIso:500,largeDay:4.4,largeNight:9.6},
+{un:"1967",nameHe:"גז הדברה, רעיל, לא צויין אחרת",smallIso:100,smallDay:1,smallNight:3.4,largeIso:500,largeDay:4.4,largeNight:9.6},
+{un:"1967",nameHe:"תערובת גז דחוס ופאראתיון",smallIso:100,smallDay:1,smallNight:3.4,largeIso:500,largeDay:4.4,largeNight:9.6},
+{un:"1975",nameHe:"תערובת של חנקן חד חמצני ודיניטרוגן",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:100,largeDay:0.6,largeNight:2.2},
+{un:"1975",nameHe:"תערובת של חנקן חד חמצני וחנקן דו חמצני",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:100,largeDay:0.6,largeNight:2.2},
+{un:"1994",nameHe:"ברזל פנטא קרבוניל",smallIso:100,smallDay:0.9,smallNight:2.1,largeIso:400,largeDay:5.2,largeNight:7.8},
+{un:"2004",nameHe:"מגנזיום דיאמיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:60,largeDay:0.5,largeNight:1.8},
+{un:"2011",nameHe:"מגנזיום פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.6,largeIso:400,largeDay:1.4,largeNight:3.9},
+{un:"2012",nameHe:"אשלגן פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:200,largeDay:0.9,largeNight:2.8},
+{un:"2013",nameHe:"סטורנציום פוספיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:200,largeDay:0.8,largeNight:2.7},
+{un:"2032",nameHe:"חומצה חנקתית מעשנת אדומה",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:150,largeDay:0.3,largeNight:0.5},
+{un:"2186",nameHe:"מימן כלורי, מונזל בקירור",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:null,largeDay:null,largeNight:null},
+{un:"2188",nameHe:"ארסין",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"2189",nameHe:"דיכלורו סילאן",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:300,largeDay:1.4,largeNight:3.1},
+{un:"2190",nameHe:"חמצן דו פלואורי, דחוס",smallIso:300,smallDay:1.8,smallNight:7.2,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2191",nameHe:"סולפוריל פלואוריד",smallIso:30,smallDay:0.1,smallNight:0.5,largeIso:400,largeDay:2.2,largeNight:5},
+{un:"2192",nameHe:"גרמניום הידריד",smallIso:150,smallDay:0.9,smallNight:3.3,largeIso:600,largeDay:3.6,largeNight:7.4},
+{un:"2194",nameHe:"סלניום הקסאפלואוריד",smallIso:200,smallDay:1.1,smallNight:3.4,largeIso:600,largeDay:3.9,largeNight:7.6},
+{un:"2195",nameHe:"טיטאניום הקסאפלואוריד",smallIso:1000,smallDay:5.9,smallNight:11.1,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2196",nameHe:"טנגסטן הקסאפלואוריד",smallIso:30,smallDay:0.2,smallNight:0.8,largeIso:150,largeDay:0.8,largeNight:2.8},
+{un:"2197",nameHe:"מימן יודי, אלמימי",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:150,largeDay:1,largeNight:2.7},
+{un:"2198",nameHe:"זרחן פנטאפלואוריד",smallIso:30,smallDay:0.2,smallNight:1,largeIso:200,largeDay:1.1,largeNight:3.5},
+{un:"2198",nameHe:"זרחן פנטאפלואוריד, דחוס",smallIso:30,smallDay:0.2,smallNight:1,largeIso:200,largeDay:1.1,largeNight:3.5},
+{un:"2199",nameHe:"פוספין",smallIso:60,smallDay:0.3,smallNight:1.1,largeIso:400,largeDay:1.3,largeNight:3.7},
+{un:"2202",nameHe:"מימן סלניד, אלמיימי",smallIso:300,smallDay:1.7,smallNight:6,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2204",nameHe:"קרבוניל סולפיד",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:300,largeDay:1.5,largeNight:3.6},
+{un:"2232",nameHe:"כלורו אצטלדהיד",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.7,largeNight:1.1},
+{un:"2232",nameHe:"2-כלורו אתאנל",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.7,largeNight:1.1},
+{un:"2285",nameHe:"איזוציאנאטו בנזוטריפלואוריד",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.6},
+{un:"2308",nameHe:"חומצה ניטרוסיל סולפורית (במים)",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:300,largeDay:0.8,largeNight:2.3},
+{un:"2334",nameHe:"אליל אמין",smallIso:30,smallDay:0.2,smallNight:0.5,largeIso:150,largeDay:1.6,largeNight:2.5},
+{un:"2337",nameHe:"פניל מרקפטאן",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.4},
+{un:"2353",nameHe:"בוטיריל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.5},
+{un:"2382",nameHe:"דימתיל הידראזין, סמטרי",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.8,largeNight:1.3},
+{un:"2395",nameHe:"איזובוטיריל כלוריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.3},
+{un:"2407",nameHe:"איזופרופיל כלורופורמאט",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.9},
+{un:"2417",nameHe:"קרבוניל פלואוריד",smallIso:100,smallDay:0.7,smallNight:2.5,largeIso:600,largeDay:3.8,largeNight:8.2},
+{un:"2418",nameHe:"גופרית טטראפלואוריד",smallIso:100,smallDay:0.5,smallNight:2.4,largeIso:400,largeDay:2.4,largeNight:5.9},
+{un:"2420",nameHe:"הקסא פלואורו אצטון",smallIso:100,smallDay:0.7,smallNight:2.7,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2421",nameHe:"חנקן תלת חמצני",smallIso:60,smallDay:0.3,smallNight:1.2,largeIso:200,largeDay:1.4,largeNight:4.3},
+{un:"2434",nameHe:"דיבנזיל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.3},
+{un:"2435",nameHe:"אתיל פניל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.6},
+{un:"2437",nameHe:"מתיל פניל דיכלורו סילאן (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.8},
+{un:"2438",nameHe:"טרימתיל אצטיל כלוריד",smallIso:60,smallDay:0.5,smallNight:1,largeIso:200,largeDay:2.3,largeNight:3.3},
+{un:"2442",nameHe:"טריכלורו אצטיל כלוריד",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.7,largeNight:1.1},
+{un:"2474",nameHe:"תיופוסגן",smallIso:60,smallDay:0.6,smallNight:1.8,largeIso:200,largeDay:2.3,largeNight:4.2},
+{un:"2477",nameHe:"מתיל איזותיוציאנאט",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.4},
+{un:"2478",nameHe:"תמיסה איוציאנאט, דליקה, רעילה",smallIso:60,smallDay:0.8,smallNight:1.8,largeIso:400,largeDay:4.7,largeNight:7},
+{un:"2478",nameHe:"איזוציאנאט, דליקה, רעילה",smallIso:60,smallDay:0.8,smallNight:1.8,largeIso:400,largeDay:4.7,largeNight:7},
+{un:"2480",nameHe:"מתיל איזוציאנאט",smallIso:60,smallDay:0.8,smallNight:1.8,largeIso:400,largeDay:4.7,largeNight:7},
+{un:"2481",nameHe:"אתיל איזוציאנאט",smallIso:150,smallDay:1.7,smallNight:5.2,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2482",nameHe:"נורמל פרופיל איזוציאנאט",smallIso:150,smallDay:2,smallNight:5.3,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2483",nameHe:"איזופרופיל איזוציאנאט",smallIso:100,smallDay:1.3,smallNight:2.8,largeIso:600,largeDay:7.8,largeNight:10.7},
+{un:"2484",nameHe:"טרט בוטיל איזוציאנאט",smallIso:150,smallDay:1.5,smallNight:3.3,largeIso:1000,largeDay:11,largeNight:11},
+{un:"2485",nameHe:"נורמל בוטיל איזוציאנאט",smallIso:60,smallDay:0.8,smallNight:1.8,largeIso:400,largeDay:4.7,largeNight:7},
+{un:"2486",nameHe:"איזובוטיל איזוציאנאט",smallIso:60,smallDay:0.6,smallNight:1.2,largeIso:300,largeDay:2.9,largeNight:4.2},
+{un:"2487",nameHe:"פניל איזוציאנאט",smallIso:60,smallDay:0.6,smallNight:1.3,largeIso:300,largeDay:3.4,largeNight:4.8},
+{un:"2488",nameHe:"ציקלוהקסיל איזוציאנאט",smallIso:100,smallDay:0.9,smallNight:1.5,largeIso:400,largeDay:4.2,largeNight:5.4},
+{un:"2495",nameHe:"יוד פנטאפלואוריד (במים)",smallIso:30,smallDay:0.3,smallNight:0.4,largeIso:100,largeDay:1.1,largeNight:1.4},
+{un:"2521",nameHe:"דיקטן, מיוצב",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:100,largeDay:0.9,largeNight:3.2},
+{un:"2534",nameHe:"מתיל כלורוסילאן",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.7,largeNight:1},
+{un:"2548",nameHe:"כלור פנטאפלואוריד",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:150,largeDay:0.8,largeNight:1.8},
+{un:"2605",nameHe:"מתוקסי מתיל איזוציאנאט",smallIso:100,smallDay:0.5,smallNight:2.5,largeIso:800,largeDay:5.1,largeNight:11},
+{un:"2606",nameHe:"מתיל אורתו סיליקאט",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.7,largeNight:0.9},
+{un:"2644",nameHe:"מתיל יודיד",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.7,largeNight:1.1},
+{un:"2646",nameHe:"הקסכלורו ציקלופנטאדיאן",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:100,largeDay:0.3,largeNight:0.7},
+{un:"2668",nameHe:"כלורואצטון ניטריל",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.3},
+{un:"2676",nameHe:"סטיבין",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.4},
+{un:"2691",nameHe:"זרחן פנטאברומיד (במים)",smallIso:60,smallDay:0.3,smallNight:1.6,largeIso:200,largeDay:1.3,largeNight:4.1},
+{un:"2692",nameHe:"בורון טריברומיד (על קרקע)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.4},
+{un:"2692",nameHe:"בורון טריברומיד (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:30,largeDay:0.2,largeNight:0.4},
+{un:"2740",nameHe:"נורמל פרופיל כלורופורמאט",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.4,largeNight:1.4},
+{un:"2742",nameHe:"כלורופורמאט, רעיל, קורוזיבי",smallIso:30,smallDay:0.1,smallNight:0.3,largeIso:60,largeDay:0.6,largeNight:1},
+{un:"2742",nameHe:"איזובוטיל כלורופורמאט",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.7},
+{un:"2743",nameHe:"נורמל בוטיל כלורופורמאט",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.7},
+{un:"2806",nameHe:"ליתיום ניטריד (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.4},
+{un:"2826",nameHe:"אתיל כלורו תיופורמאט",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.4,largeNight:1.6},
+{un:"2845",nameHe:"אתיל פוספונוס די כלוריד, אלמיימי",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.7},
+{un:"2845",nameHe:"מתיל פוספונוס דיכלוריד",smallIso:30,smallDay:0.3,smallNight:0.7,largeIso:100,largeDay:1.4,largeNight:2.3},
+{un:"2901",nameHe:"ברום כלוריד",smallIso:30,smallDay:0.4,smallNight:1.2,largeIso:200,largeDay:2.6,largeNight:4.2},
+{un:"2927",nameHe:"אתיל פוספונותיואיכ דיכלוריד, אלמיימי",smallIso:100,smallDay:0.5,smallNight:1.8,largeIso:1000,largeDay:5.7,largeNight:11},
+{un:"2927",nameHe:"אתיל פוספורו דיכלורידיאט",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.2},
+{un:"2965",nameHe:"בורון טריפלואוריד די מתיל אתראט (במים)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.3,largeNight:0.3},
+{un:"2977",nameHe:"אורניום הקסאפלואוריד, בקיע (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:100,largeDay:0.9,largeNight:2.8},
+{un:"2978",nameHe:"אורניום הקסאפלואוריד, לא בקיע (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:30,largeDay:0.4,largeNight:1.6},
+{un:"2985",nameHe:"כלורוסילאן, דליק, קורוזיבי (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:30,largeDay:0.4,largeNight:1.6},
+{un:"2986",nameHe:"כלורוסילאן, קורוזיבי, דליק (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:1.6},
+{un:"2987",nameHe:"כלורוסילאן, קורוזיבי (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:1.6},
+{un:"2988",nameHe:"כלורוסילאן, מגיב עם מים (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:1.6},
+{un:"3023",nameHe:"2מתיל 2 הפטאן תיול",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:1.6},
+{un:"3048",nameHe:"אלומיניום פוספיד חומר הדברה (במים)",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.6,largeNight:0.8},
+{un:"3057",nameHe:"טריפלואורו אצטיל כלוריד",smallIso:30,smallDay:0.1,smallNight:0.7,largeIso:400,largeDay:1.6,largeNight:4.5},
+{un:"3079",nameHe:"מתא אקרילו ניטריל, מיוצב",smallIso:30,smallDay:0.2,smallNight:0.9,largeIso:800,largeDay:4.9,largeNight:11},
+{un:"3083",nameHe:"פרכלוריל פלואוריד",smallIso:30,smallDay:0.3,smallNight:0.7,largeIso:150,largeDay:1.7,largeNight:2.8},
+{un:"3160",nameHe:"גז מנוזל, רעיל, דליק",smallIso:30,smallDay:0.2,smallNight:1.1,largeIso:1000,largeDay:5.5,largeNight:10.9},
+{un:"3162",nameHe:"גז מנוזל, רעיל",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"3246",nameHe:"מתאן סולפוניל כלוריד",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"3275",nameHe:"ניטריל, רעיל, דליק",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.7,largeNight:1},
+{un:"3276",nameHe:"ניטריל, נוזל, רעיל",smallIso:30,smallDay:0.3,smallNight:0.7,largeIso:150,largeDay:1.7,largeNight:2.8},
+{un:"3278",nameHe:"תרכובת אורגנו זרחנית, נוזל",smallIso:30,smallDay:0.3,smallNight:0.7,largeIso:150,largeDay:1.7,largeNight:2.8},
+{un:"3279",nameHe:"תרכובת אורגנו זרחנית, רעיל, דליק",smallIso:30,smallDay:0.4,smallNight:1.2,largeIso:200,largeDay:2.6,largeNight:4.2},
+{un:"3280",nameHe:"תרכובת אורגנו ארסנית, נוזל",smallIso:30,smallDay:0.4,smallNight:1.2,largeIso:200,largeDay:2.6,largeNight:4.2},
+{un:"3281",nameHe:"מתכת קרבוניל, נוזל",smallIso:30,smallDay:0.2,smallNight:0.7,largeIso:150,largeDay:1.7,largeNight:3.6},
+{un:"3294",nameHe:"מימן ציאנידי בתמיסה עם אלכוהול",smallIso:100,smallDay:1.4,smallNight:5.2,largeIso:1000,largeDay:11,largeNight:11},
+{un:"3300",nameHe:"תערובת פחמן דו חמצני ואתילן אוקסיד",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:150,largeDay:0.7,largeNight:2},
+{un:"3303",nameHe:"גז דחוס, רעיל, מחמצן",smallIso:100,smallDay:0.5,smallNight:2.5,largeIso:800,largeDay:5.1,largeNight:11},
+{un:"3304",nameHe:"גז דחוס, רעיל, קורוזיבי",smallIso:200,smallDay:1.1,smallNight:3.4,largeIso:600,largeDay:3.9,largeNight:7.6},
+{un:"3305",nameHe:"גז דחוס, רעיל, דליק, קורוזיבי",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"3306",nameHe:"גז דחוס, רעיל, מחמצן, קורוזיבי",smallIso:100,smallDay:0.5,smallNight:2.5,largeIso:1000,largeDay:5.5,largeNight:11},
+{un:"3307",nameHe:"גז מנוזל, רעיל, מחמצן",smallIso:100,smallDay:0.5,smallNight:2.5,largeIso:800,largeDay:5.1,largeNight:11},
+{un:"3308",nameHe:"גז מנוזל, רעיל, קורוזיבי",smallIso:200,smallDay:1.1,smallNight:3.4,largeIso:600,largeDay:3.9,largeNight:7.6},
+{un:"3309",nameHe:"גז מנוזל, רעיל, דליק",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"3310",nameHe:"גז מנוזל, רעיל, מחמצן, קורוזיבי",smallIso:100,smallDay:0.5,smallNight:2.5,largeIso:1000,largeDay:5.1,largeNight:11},
+{un:"3318",nameHe:"תמיסת אמוניה, >50%",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:150,largeDay:0.8,largeNight:2},
+{un:"3355",nameHe:"גז הדברה, רעיל, דליק",smallIso:150,smallDay:1,smallNight:3.9,largeIso:1000,largeDay:6.2,largeNight:10.5},
+{un:"3361",nameHe:"כלורוסילאן, רעיל, קורוזיבי (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:1.6},
+{un:"3362",nameHe:"כלורוסילאן, רעיל, קורוזיבי, דליק (במים)",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:1.6},
+{un:"3381",nameHe:"רעיל ע''י שאיפה, נוזל A",smallIso:60,smallDay:0.6,smallNight:1.8,largeIso:200,largeDay:2.3,largeNight:4.2},
+{un:"3382",nameHe:"רעיל ע''י שאיפה, נוזל B",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.8},
+{un:"3383",nameHe:"רעיל ע''י שאיפה, נוזל דליק A",smallIso:60,smallDay:0.5,smallNight:1.5,largeIso:300,largeDay:3.4,largeNight:5.7},
+{un:"3384",nameHe:"רעיל ע''י שאיפה, נוזל דליק B",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.6,largeNight:0.9},
+{un:"3385",nameHe:"רעיל ע''י שאיפה, מגיב עם מים A",smallIso:60,smallDay:0.6,smallNight:1.8,largeIso:200,largeDay:2.3,largeNight:4.2},
+{un:"3386",nameHe:"רעיל ע''י שאיפה, מגיב עם מים B",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.8},
+{un:"3387",nameHe:"רעיל ע''י שאיפה, מחמצן A",smallIso:60,smallDay:0.5,smallNight:1.5,largeIso:300,largeDay:3.4,largeNight:5.7},
+{un:"3388",nameHe:"רעיל ע''י שאיפה, מחמצן B",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:150,largeDay:0.3,largeNight:0.5},
+{un:"3389",nameHe:"רעיל ע''י שאיפה, קורוזיבי A",smallIso:100,smallDay:0.3,smallNight:0.7,largeIso:800,largeDay:1.7,largeNight:2.8},
+{un:"3390",nameHe:"רעיל ע''י שאיפה, קורוזיבי B",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.6},
+{un:"3456",nameHe:"חומצה ניטרוסיל סולפורית, מוצק (במים)",smallIso:30,smallDay:0.1,smallNight:0.4,largeIso:200,largeDay:0.7,largeNight:2.3},
+{un:"3488",nameHe:"רעיל ע''י שאיפה, דליק קורוזיבי A",smallIso:60,smallDay:0.5,smallNight:1.5,largeIso:300,largeDay:3.4,largeNight:5.7},
+{un:"3489",nameHe:"רעיל ע''י שאיפה, דליק קורוזיבי B",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.6,largeNight:0.9},
+{un:"3490",nameHe:"רעיל ע''י שאיפה, מגיב מים דליק A",smallIso:60,smallDay:0.5,smallNight:1.5,largeIso:300,largeDay:3.4,largeNight:5.7},
+{un:"3491",nameHe:"רעיל ע''י שאיפה, מגיב מים דליק B",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.6,largeNight:0.9},
+{un:"3492",nameHe:"רעיל ע''י שאיפה, קורוזיבי דליק A",smallIso:60,smallDay:0.5,smallNight:1.5,largeIso:300,largeDay:3.4,largeNight:5.7},
+{un:"3493",nameHe:"רעיל ע''י שאיפה, קורוזיבי דליק B",smallIso:30,smallDay:0.2,smallNight:0.3,largeIso:60,largeDay:0.6,largeNight:0.9},
+{un:"3494",nameHe:"נפט גולמי חמוץ, דליק, רעיל",smallIso:30,smallDay:0.1,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.8},
+{un:"3507",nameHe:"אורניום הקסאפלואוריד (<0.1 ק''ג)",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3512",nameHe:"גז ספוח, רעיל",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3514",nameHe:"גז ספוח, רעיל, דליק",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3515",nameHe:"גז ספוח, רעיל, מחמצן",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3516",nameHe:"גז ספוח, רעיל, קורוזיבי",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3517",nameHe:"גז ספוח, רעיל, דליק, קורוזיבי",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3518",nameHe:"גז ספוח, רעיל, מחמצן, קורוזיבי",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3519",nameHe:"בורון טריפלואוריד, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3520",nameHe:"כלור, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3521",nameHe:"סיליקון טטראפלואוריד, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3522",nameHe:"ארסין, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3523",nameHe:"גרמן, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3524",nameHe:"זרחן פנטאפלואוריד, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3525",nameHe:"פוספין, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3526",nameHe:"מימן סלניד, ספוח",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.1,largeNight:0.1},
+{un:"3539",nameHe:"כלים המכילים גז רעיל",smallIso:30,smallDay:0.3,smallNight:1.1,largeIso:300,largeDay:1.4,largeNight:3.7},
+{un:"676-97-1",nameHe:"מתיל פוספוניק דיכלוריד",smallIso:30,smallDay:0.2,smallNight:0.2,largeIso:60,largeDay:0.5,largeNight:0.6},
+{un:"4300-97-4",nameHe:"כלורופיאלויל כלוריד",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.3},
+{un:"1737-93-5",nameHe:"2,4,6 דיכלורו 3,5 טריפלואורפירידין",smallIso:30,smallDay:0.1,smallNight:0.1,largeIso:30,largeDay:0.2,largeNight:0.3},
+{un:"2487-90-3",nameHe:"טרי מתוקסי סילאן",smallIso:30,smallDay:0.2,smallNight:0.7,largeIso:150,largeDay:1.4,largeNight:2.4}
+    ];
+
+    // --- TABLE 2 DATA (WATER REACTIVE) ---
+    const table2Data = {
+        "1162": "HCl מימן כלורי, HBr מימן ברומי",
+        "1183": "HCl מימן כלורי", "1196": "HCl מימן כלורי", 
+        "1242": "HCl מימן כלורי", "1250": "HCl מימן כלורי", "1295": "HCl מימן כלורי", 
+        "1298": "HCl מימן כלורי", "1305": "HCl מימן כלורי", 
+        "1340": "H₂S מימן גופרי", 
+        "1360": "PH₃ פוספין", 
+        "1384": "SO₂ גופרית דו-חמצנית", 
+        "1397": "PH₃ פוספין",
+        "1419": "PH₃ פוספין, H₂S מימן גופרי",
+        "1432": "PH₃ פוספין, H₂S מימן גופרי",
+        "1541": "HCN מימן ציאניד",
+        "1716": "HBr מימן ברומי", 
+        "1717": "HCl מימן כלורי, PH₃ פוספין",
+        "1724": "HCl מימן כלורי",
+        "1725": "HBr מימן ברומי", 
+        "1726": "HCl מימן כלורי",
+        "1728": "HCl מימן כלורי",
+        "1732": "HF מימן פלואורי",
+        "1741": "HCl מימן כלורי",
+        "1745": "HF מימן פלואורי",
+        "1746": "HF מימן פלואורי",
+        "1747": "HCl מימן כלורי",
+        "1752": "HCl מימן כלורי",
+        "1753": "HCl מימן כלורי",
+        "1754": "HCl מימן כלורי",
+        "1758": "HCl מימן כלורי",
+        "1762": "HCl מימן כלורי",
+        "1763": "HCl מימן כלורי",
+        "1765": "HCl מימן כלורי",
+        "1766": "HCl מימן כלורי",
+        "1767": "HCl מימן כלורי",
+        "1769": "HCl מימן כלורי",
+        "1771": "HCl מימן כלורי",
+        "1777": "HF מימן פלואורי",
+        "1781": "HCl מימן כלורי",
+        "1784": "HCl מימן כלורי",
+        "1799": "HCl מימן כלורי",
+        "1800": "HCl מימן כלורי",
+        "1801": "HCl מימן כלורי",
+        "1804": "HCl מימן כלורי",
+        "1806": "HCl מימן כלורי",
+        "1808": "HBr מימן ברומי",
+        "1809": "HCl מימן כלורי, PH₃ פוספין",
+        "1810": "HCl מימן כלורי, PH₃ פוספין",
+        "1815": "HCl מימן כלורי",
+        "1816": "HCl מימן כלורי",
+        "1818": "HCl מימן כלורי",
+        "1828": "HCl מימן כלורי, SO₂ גופרית דו-חמצנית",
+        "1834": "HCl מימן כלורי",
+        "1836": "HCl מימן כלורי, SO₂ גופרית דו-חמצנית",
+        "1838": "HCl מימן כלורי",
+        "1898": "HI מימן יודי",
+        "1923": "SO₂ גופרית דו-חמצנית",
+        "1929": "SO₂ גופרית דו-חמצנית",
+        "1931": "SO₂ גופרית דו-חמצנית",
+        "2004": "NH₃ אמוניה",
+        "2011": "PH₃ פוספין",
+        "2012": "PH₃ פוספין",
+        "2013": "PH₃ פוספין",
+        "2977": "HF מימן פלואורי",
+        "2978": "HF מימן פלואורי",
+        "2985": "HCl מימן כלורי",
+        "2986": "HCl מימן כלורי",
+        "2987": "HCl מימן כלורי",
+        "2988": "HCl מימן כלורי",
+        "3048": "PH₃ פוספין",
+        "3361": "HCl מימן כלורי"
+    };
+
+    // --- TABLE 3 DATA ---
+    const table3Data = {
+        "1005": { // Ammonia
+            "Rail": { "iso": 300, "day": {"low": 1.6, "medium": 1.2, "high": 1.0}, "night": {"low": 4.1, "medium": 2.1, "high": 1.3}, "label": "קרון רכבת" },
+            "Truck": { "iso": 150, "day": {"low": 0.8, "medium": 0.5, "high": 0.4}, "night": {"low": 1.8, "medium": 0.7, "high": 0.6}, "label": "משאית" },
+            "Ag": { "iso": 60, "day": {"low": 0.5, "medium": 0.3, "high": 0.3}, "night": {"low": 1.4, "medium": 0.3, "high": 0.3}, "label": "מכל חקלאי" },
+            "Cyl": { "iso": 30, "day": {"low": 0.3, "medium": 0.2, "high": 0.1}, "night": {"low": 0.7, "medium": 0.3, "high": 0.2}, "label": "מספר מכלים קטנים" }
+        },
+        "1017": { // Chlorine
+            "Rail": { "iso": 1000, "day": {"low": 9.6, "medium": 6.3, "high": 5.1}, "night": {"low": 11.0, "medium": 8.9, "high": 6.5}, "label": "קרון רכבת" },
+            "Truck": { "iso": 600, "day": {"low": 5.6, "medium": 3.3, "high": 2.5}, "night": {"low": 6.4, "medium": 4.7, "high": 3.8}, "label": "משאית" },
+            "Ton": { "iso": 300, "day": {"low": 1.9, "medium": 1.3, "high": 1.0}, "night": {"low": 3.5, "medium": 2.3, "high": 1.3}, "label": "מספר מכלים במשקל טון" },
+            "Cyl": { "iso": 150, "day": {"low": 1.3, "medium": 0.7, "high": 0.5}, "night": {"low": 2.4, "medium": 1.2, "high": 0.6}, "label": "מספר מכלים קטנים או מכל במשקל טון" }
+        },
+        "1040": { // Ethylene Oxide (Updated to match the user's data)
+            "Rail": { "iso": 200, "day": {"low": 1.5, "medium": 0.8, "high": 0.7}, "night": {"low": 3.0, "medium": 1.4, "high": 0.8}, "label": "קרון רכבת" },
+            "Truck": { "iso": 100, "day": {"low": 0.9, "medium": 0.5, "high": 0.4}, "night": {"low": 2.0, "medium": 0.7, "high": 0.4}, "label": "משאית" },
+            "Cyl": { "iso": 30, "day": {"low": 0.4, "medium": 0.2, "high": 0.1}, "night": {"low": 0.8, "medium": 0.3, "high": 0.2}, "label": "מספר מכלים קטנים או מכל במשקל טון" }
+        },
+        "1050": { // Hydrogen Chloride
+            "Rail": { "iso": 500, "day": {"low": 3.7, "medium": 2.0, "high": 1.7}, "night": {"low": 9.7, "medium": 3.3, "high": 2.2}, "label": "קרון רכבת" },
+            "Truck": { "iso": 200, "day": {"low": 1.5, "medium": 0.8, "high": 0.6}, "night": {"low": 3.7, "medium": 1.5, "high": 0.8}, "label": "משאית" },
+            "Ton": { "iso": 30, "day": {"low": 0.4, "medium": 0.2, "high": 0.1}, "night": {"low": 1.0, "medium": 0.3, "high": 0.1}, "label": "מספר מכלים במשקל טון" },
+            "Cyl": { "iso": 30, "day": {"low": 0.3, "medium": 0.2, "high": 0.1}, "night": {"low": 0.9, "medium": 0.3, "high": 0.2}, "label": "מספר מכלים קטנים או מכל במשקל טון" }
+        },
+        "1052": { // Hydrogen Fluoride
+            "Rail": { "iso": 500, "day": {"low": 3.4, "medium": 2.1, "high": 1.8}, "night": {"low": 6.4, "medium": 3.0, "high": 1.9}, "label": "קרון רכבת" },
+            "Truck": { "iso": 200, "day": {"low": 2.0, "medium": 1.0, "high": 0.9}, "night": {"low": 3.6, "medium": 1.5, "high": 0.9}, "label": "משאית" },
+            "Cyl": { "iso": 100, "day": {"low": 0.8, "medium": 0.4, "high": 0.3}, "night": {"low": 1.7, "medium": 0.5, "high": 0.3}, "label": "מספר מכלים קטנים או מכל במשקל טון" }
+        },
+        "1079": { // Sulfur Dioxide
+            "Rail": { "iso": 1000, "day": {"low": 11.0, "medium": 11.0, "high": 6.9}, "night": {"low": 11.0, "medium": 11.0, "high": 9.6}, "label": "קרון רכבת" },
+            "Truck": { "iso": 1000, "day": {"low": 11.0, "medium": 6.0, "high": 5.0}, "night": {"low": 11.0, "medium": 7.9, "high": 6.0}, "label": "משאית" },
+           "Ton": { "iso": 500, "day": {"low": 5.2, "medium": 2.2, "high": 1.7}, "night": {"low": 7.4, "medium": 4.0, "high": 2.7}, "label": "מספר מכלים במשקל טון" },
+            "Cyl": { "iso": 200, "day": {"low": 3.1, "medium": 1.5, "high": 1.1}, "night": {"low": 5.6, "medium": 2.4, "high": 1.5}, "label": "מספר מכלים קטנים או מכל במשקל טון" }
+        }
+    };
+
+    // --- APP LOGIC ---
+
+    let map, isoCircle, protectPoly;
+    let selectedMat = null;
+    let userMarker = null;
+    let currentResults = null;
+    let autoWindInterval = null;
+    
+    // Monitoring vars
+    let isMonitoringMode = false;
+    let plumeLayer = null; // Renamed from heatLayer for accuracy
+    let monitoringFeatures = []; // Array of GeoJSON points
+
+    window.onload = function() {
+        // Maps Layers
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 });
+        const hybridLayer = L.layerGroup([
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png')
+        ]);
+        const populationVisLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: 'CARTO', subdomains: 'abcd', maxZoom: 20 });
+
+        map = L.map('map', {
+            center: [32.0853, 34.7818],
+            zoom: 10,
+            layers: [osmLayer]
+        });
+
+        const baseMaps = { "מפה רגילה": osmLayer, "תצ\"א (לוויין)": satelliteLayer, "היברידי": hybridLayer, "מפה כהה": populationVisLayer };
+        L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map); 
+        L.control.scale({metric: true, imperial: false, position: 'bottomleft'}).addTo(map);
+
+        map.on('click', function(e) {
+            if (isMonitoringMode) {
+                addMonitoringPoint(e.latlng);
+            } else {
+                 setUserLocation(e.latlng.lat, e.latlng.lng);
+            }
+        });
+        
+        map.on('contextmenu', function(e) { setUserLocation(e.latlng.lat, e.latlng.lng); });
+        setupAutocomplete();
+        updateWindDisplay(0);
+    };
+
+    function getUserLocation() {
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                setUserLocation(pos.coords.latitude, pos.coords.longitude);
+                map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+            }, () => alert("לא ניתן לאתר מיקום"));
+        }
+    }
+
+    function setUserLocation(lat, lng) {
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.marker([lat, lng], {draggable: true}).addTo(map);
+        fetchCityAndDensity(lat, lng);
+        userMarker.on('dragend', function(event) {
+            const pos = event.target.getLatLng();
+            fetchCityAndDensity(pos.lat, pos.lng);
+            if(document.getElementById('results-container').style.display === 'block') calculateAndDraw(); 
+        });
+    }
+
+    // --- REVERSE GEOCODING & DENSITY ---
+    async function fetchCityAndDensity(lat, lng) {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`;
+        try {
+            const response = await fetch(url, { headers: { 'User-Agent': 'ERG-Tool/1.0' } });
+            const data = await response.json();
+            if (data && data.address) {
+                const addr = data.address;
+                const city = addr.city || addr.town || addr.village || addr.hamlet || "";
+                document.getElementById('addr-city').value = city;
+                document.getElementById('addr-street').value = addr.road || "";
+                const density = getDensityForCity(city, addr);
+                document.getElementById('pop-density').value = density;
+                
+                const sourceBadge = document.getElementById('pop-source-badge');
+                if (density > 100) {
+                     sourceBadge.innerText = `מקור: למ"ס 2023 (${city || 'יישוב לא ידוע'})`;
+                     sourceBadge.style.background = "#d1fae5"; sourceBadge.style.color = "#065f46";
+                } else {
+                     sourceBadge.innerText = `מקור: שטח פתוח / ללא שיוך מוניציפלי`;
+                     sourceBadge.style.background = "#fee2e2"; sourceBadge.style.color = "#991b1b";
+                }
+                if(document.getElementById('results-container').style.display === 'block') updatePopulationEst();
+            }
+        } catch (e) { console.log("Reverse geocode failed", e); }
+    }
+
+    function getDensityForCity(cityName, addressObj) {
+        if (!cityName) return 0;
+        const normalized = cityName.toLowerCase().trim();
+        if (cbsDensities[normalized]) return cbsDensities[normalized];
+        for (const key in cbsDensities) { if (normalized.includes(key)) return cbsDensities[key]; }
+        if (addressObj.city) return 3000;
+        if (addressObj.town) return 1500;
+        if (addressObj.village) return 500;
+        return 50;
+    }
+
+    async function geocodeAddress() {
+        const city = document.getElementById('addr-city').value.trim();
+        const street = document.getElementById('addr-street').value.trim();
+        const num = document.getElementById('addr-num').value.trim();
+        const query = `${street} ${num}, ${city}, Israel`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+        try {
+            const response = await fetch(url, { headers: { 'User-Agent': 'ERG-Tool/1.0' } });
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lon = parseFloat(data[0].lon);
+                setUserLocation(lat, lon);
+                map.setView([lat, lon], 16);
+            } else alert("לא נמצאה כתובת.");
+        } catch (e) { alert("שגיאה בתקשורת."); }
+    }
+
+    // --- MONITORING (IDW POLYGONS) LOGIC ---
+    function toggleMonitoringMode() {
+        isMonitoringMode = !isMonitoringMode;
+        const btn = document.getElementById('btn-monitor');
+        const controls = document.getElementById('monitoring-controls');
+        if (isMonitoringMode) {
+            btn.classList.add('monitoring-active');
+            btn.innerText = "📡 מצב הזנת גלאים פעיל (לחץ לסיום)";
+            controls.style.display = 'block';
+            map.getContainer().style.cursor = 'crosshair';
+        } else {
+            btn.classList.remove('monitoring-active');
+            btn.innerText = "📡 הפעל מצב הזנת גלאים";
+            controls.style.display = 'none';
+            map.getContainer().style.cursor = '';
+        }
+    }
+
+    function addMonitoringPoint(latlng) {
+        const val = prompt("הכנס ערך מדידה (PPM):", "50");
+        if (val === null || val.trim() === "") return; 
+        const ppm = parseFloat(val);
+        
+        // Add visual marker
+        L.circleMarker(latlng, {
+            radius: 5, color: '#000', weight: 1, fillColor: '#fff', fillOpacity: 0.8
+        }).bindPopup(`<b>מדידה:</b> ${ppm} PPM`).addTo(map);
+
+        // Add to GeoJSON collection for Turf analysis
+        monitoringFeatures.push(turf.point([latlng.lng, latlng.lat], { intensity: ppm }));
+
+        // Try to generate polygons if we have enough points
+        if (monitoringFeatures.length >= 3) {
+            generatePlumePolygons();
+        }
+    }
+
+    function generatePlumePolygons() {
+        if (plumeLayer) map.removeLayer(plumeLayer);
+
+        // 1. Create a FeatureCollection
+        const points = turf.featureCollection(monitoringFeatures);
+
+        // 2. Determine breaks based on Max value
+        const maxVal = Math.max(...monitoringFeatures.map(f => f.properties.intensity));
+        // Zones: 10%, 30%, 60% of max
+        const breaks = [maxVal * 0.1, maxVal * 0.3, maxVal * 0.6, maxVal * 2]; 
+
+        // 3. Interpolate (IDW) -> Grid
+        // Note: 'cellWidth' determines resolution. Smaller = smoother but slower.
+        // We calculate a dynamic cell size based on the spread of points to avoid crashing
+        const bbox = turf.bbox(points);
+        // Add buffer to bbox so contours don't cut off at the edge
+        const expandedBbox = [bbox[0]-0.02, bbox[1]-0.02, bbox[2]+0.02, bbox[3]+0.02];
+        
+        const cellWidth = 0.05; // Kilometers. 
+        const options = {gridType: 'points', property: 'intensity', units: 'kilometers'};
+        
+        try {
+            const grid = turf.interpolate(points, cellWidth, options);
+            
+            // 4. Generate Isobands (Polygons) from Grid
+            const isobands = turf.isobands(grid, breaks, {zProperty: 'intensity'});
+
+            // 5. Draw to Map with Colors
+            plumeLayer = L.geoJSON(isobands, {
+                style: function(feature) {
+                    // Feature properties usually contain the range, e.g., "intensity": "10-30"
+                    // But isobands output in Turf creates specific properties.
+                    // We need to color based on the break index usually stored in properties
+                    
+                    // Turf returns properties like { intensity: 5 } where 5 is the value? 
+                    // Actually turf.isobands returns individual polygons for the ranges.
+                    // We can infer color from the range value.
+                    
+                    const valString = feature.properties.intensity; // e.g. "10-30"
+                    const lowerBound = parseFloat(valString.split('-')[0]);
+                    
+                    if (lowerBound >= breaks[2]) return { color: 'red', fillOpacity: 0.6, stroke: false }; // Extreme
+                    if (lowerBound >= breaks[1]) return { color: 'orange', fillOpacity: 0.5, stroke: false }; // High
+                    if (lowerBound >= breaks[0]) return { color: 'yellow', fillOpacity: 0.4, stroke: false }; // Med
+                    return { color: 'green', fillOpacity: 0.3, stroke: false }; // Low
+                }
+            }).addTo(map);
+            
+        } catch (e) {
+            console.error("Interpolation failed:", e);
+        }
+    }
+
+    function clearHeatmap() {
+        if (plumeLayer) map.removeLayer(plumeLayer);
+        plumeLayer = null;
+        monitoringFeatures = [];
+        map.eachLayer((layer) => {
+            if (layer instanceof L.CircleMarker) {
+                map.removeLayer(layer);
+            }
+        });
+    }
+
+    // --- AUTO WIND ---
+    function toggleAutoWind() {
+        const isChecked = document.getElementById('autoWindToggle').checked;
+        if (isChecked) {
+            getRealTimeWind(true); 
+            autoWindInterval = setInterval(() => getRealTimeWind(true), 60000);
+        } else {
+            if (autoWindInterval) clearInterval(autoWindInterval);
+            autoWindInterval = null;
+        }
+    }
+
+    function getRealTimeWind(isAuto = false) {
+        if (!userMarker) { if(!isAuto) alert("קבע מיקום"); return; }
+        const ll = userMarker.getLatLng();
+        if(!isAuto) document.getElementById('wind-loader').style.display = 'inline-block';
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${ll.lat}&longitude=${ll.lng}&current_weather=true`)
+        .then(res => res.json()).then(data => {
+            if(!isAuto) document.getElementById('wind-loader').style.display = 'none';
+            if (data.current_weather) {
+                const windDir = parseInt(data.current_weather.winddirection);
+                document.getElementById('windDir').value = windDir;
+                updateWindDisplay(windDir);
+                document.getElementById('weather-status').innerText = `רוח: ${data.current_weather.windspeed} קמ"ש, כיוון ${windDir}°`;
+                if (isAuto && document.getElementById('results-container').style.display === 'block') calculateAndDraw();
+            }
+        }).catch(() => { if(!isAuto) document.getElementById('wind-loader').style.display = 'none'; });
+    }
+
+    document.getElementById('windDir').addEventListener('input', (e) => updateWindDisplay(parseInt(e.target.value)));
+    function updateWindDisplay(deg) {
+        const dirs = ["צפון", "צפון-מזרח", "מזרח", "דרום-מזרח", "דרום", "דרום-מערב", "מערב", "צפון-מערב"];
+        const idx = Math.round(((deg %= 360) < 0 ? deg + 360 : deg) / 45) % 8;
+        document.getElementById('windValue').innerText = `${deg}° (${dirs[idx]})`;
+    }
+
+    // --- MAIN CALC ---
+    function setupAutocomplete() {
+        const input = document.getElementById('searchInput');
+        const list = document.getElementById('material-list');
+        input.addEventListener('input', function() {
+            const val = this.value.toLowerCase();
+            list.innerHTML = '';
+            if (!val || val.length < 2) { list.style.display = 'none'; return; }
+            const matches = hazmatDB.filter(m => m.un.includes(val) || m.nameHe.toLowerCase().includes(val)).slice(0, 50);
+            matches.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'mat-item';
+                div.innerHTML = `${m.nameHe} <span class="mat-un">(${m.un})</span>`;
+                div.onclick = () => selectMaterial(m);
+                list.appendChild(div);
+            });
+            list.style.display = matches.length ? 'block' : 'none';
+        });
+        document.addEventListener('click', function(e) { if (e.target !== input) list.style.display = 'none'; });
+    }
+
+    function selectMaterial(mat) {
+        selectedMat = mat;
+        document.getElementById('searchInput').value = `${mat.nameHe} (${mat.un})`;
+        document.getElementById('material-list').style.display = 'none';
+        document.getElementById('selected-material-info').innerText = "נבחר: " + mat.nameHe;
+        const isWaterReactive = hazmatDB.some(dbMat => dbMat.un === mat.un && table2Data[dbMat.un]);
+        const waterWrapper = document.getElementById('water-checkbox-wrapper');
+        if (isWaterReactive) {
+            waterWrapper.style.display = 'flex';
+        } else {
+            waterWrapper.style.display = 'none';
+            document.getElementById('waterSpill').checked = false; 
+        }
+        checkTable3Visibility();
+        checkWaterReaction();
+    }
+
+    function checkWaterReaction() {
+        const isWater = document.getElementById('waterSpill').checked;
+        const warnBox = document.getElementById('water-warning');
+        if (isWater && selectedMat && table2Data[selectedMat.un]) {
+            document.getElementById('water-gas-msg').innerText = table2Data[selectedMat.un];
+            warnBox.style.display = 'block';
+        } else { warnBox.style.display = 'none'; }
+    }
+
+    function checkTable3Visibility() {
+        const isLarge = document.getElementById('spillSize').value === 'large';
+        const t3Div = document.getElementById('table3-options');
+        const containerSel = document.getElementById('containerType');
+        if (isLarge && selectedMat && table3Data[selectedMat.un]) {
+            t3Div.style.display = 'block';
+            containerSel.innerHTML = '';
+            const data = table3Data[selectedMat.un];
+            for (const key in data) {
+                const opt = document.createElement('option');
+                opt.value = key; opt.innerText = data[key].label;
+                containerSel.appendChild(opt);
+            }
+        } else { t3Div.style.display = 'none'; }
+    }
+
+    function calculateAndDraw() {
+        if (!userMarker || !selectedMat) { alert("חסרים נתונים"); return; }
+        const spillSize = document.getElementById('spillSize').value;
+        const timeDay = document.getElementById('timeDay').value;
+        const windDeg = parseInt(document.getElementById('windDir').value);
+        let isoDist = 0, protectDist = 0;
+
+        if (spillSize === 'large' && table3Data[selectedMat.un]) {
+            const cType = document.getElementById('containerType').value;
+            const wSpeed = document.getElementById('windSpeed').value;
+            protectDist = table3Data[selectedMat.un][cType][timeDay][wSpeed];
+            isoDist = table3Data[selectedMat.un][cType].iso; 
+            document.getElementById('table3-warning').style.display = 'block';
+        } else {
+            document.getElementById('table3-warning').style.display = 'none';
+            if (spillSize === 'small') {
+                isoDist = selectedMat.smallIso;
+                protectDist = timeDay === 'day' ? selectedMat.smallDay : selectedMat.smallNight;
+            } else {
+                isoDist = selectedMat.largeIso;
+                protectDist = timeDay === 'day' ? selectedMat.largeDay : selectedMat.largeNight;
+            }
+        }
+
+        if (protectDist === null) { document.getElementById('res-protect').innerText = "ראה טבלה"; return; }
+
+        document.getElementById('results-container').style.display = 'block';
+        document.getElementById('res-iso').innerText = `${isoDist} מטר`;
+        document.getElementById('res-protect').innerText = `${protectDist} ק"מ`;
+        document.getElementById('btn-kml').style.display = 'inline-block';
+        document.getElementById('btn-wa').style.display = 'inline-block';
+
+        drawZones(userMarker.getLatLng(), windDeg, isoDist, protectDist * 1000);
+    }
+
+    function drawZones(center, windFromDeg, isoRadiusMeters, protectRadiusMeters) {
+        if (isoCircle) map.removeLayer(isoCircle);
+        if (protectPoly) map.removeLayer(protectPoly);
+
+        const centerPt = turf.point([center.lng, center.lat]);
+        const windTo = (windFromDeg + 180) % 360; 
+        const isoRadiusKm = isoRadiusMeters / 1000;
+        const protectDistKm = protectRadiusMeters / 1000;
+
+        const isoCircleGeo = turf.circle(centerPt, isoRadiusKm, {steps: 64, units: 'kilometers'});
+        const bearingLeft = windTo - 30;
+        const startLeft = turf.destination(centerPt, isoRadiusKm, bearingLeft, {units: 'kilometers'});
+        const startRight = turf.destination(centerPt, isoRadiusKm, windTo + 30, {units: 'kilometers'});
+
+        const polyCoords = [];
+        polyCoords.push(startLeft.geometry.coordinates);
+        const steps = 32;
+        for (let i = 0; i <= steps; i++) {
+            const angle = bearingLeft + (i * (60 / steps));
+            const pt = turf.destination(centerPt, protectDistKm, angle, {units: 'kilometers'});
+            polyCoords.push(pt.geometry.coordinates);
+        }
+        polyCoords.push(startRight.geometry.coordinates);
+        polyCoords.push(centerPt.geometry.coordinates); 
+        polyCoords.push(startLeft.geometry.coordinates);
+
+        const wedgeSector = turf.polygon([polyCoords]);
+        const combined = turf.union(isoCircleGeo, wedgeSector);
+
+        isoCircle = L.geoJSON(isoCircleGeo, { style: { color: '#FF3B30', fillColor: '#FF3B30', fillOpacity: 0.35, weight: 2 } }).addTo(map);
+        protectPoly = L.geoJSON(combined, { style: { color: '#FF9500', fillColor: '#FF9500', fillOpacity: 0.25, weight: 2, dashArray: '5, 5' } }).addTo(map);
+        
+        const bounds = protectPoly.getBounds();
+        map.fitBounds(bounds, {padding: [50, 50]});
+
+        currentResults = {
+            isoGeo: isoCircleGeo, protectGeo: combined, un: selectedMat.un, name: selectedMat.nameHe,
+            isoDist: isoRadiusMeters, protectDist: protectDistKm, lat: center.lat, lng: center.lng, windDeg: windFromDeg
+        };
+        updatePopulationEst();
+    }
+
+    function updatePopulationEst() {
+        if (!currentResults) return;
+        const areaSqMeters = turf.area(currentResults.protectGeo);
+        const areaSqKm = areaSqMeters / 1000000;
+        const density = parseFloat(document.getElementById('pop-density').value) || 0;
+        const popEstimate = Math.round(areaSqKm * density);
+        document.getElementById('pop-info').style.display = 'block';
+        document.getElementById('pop-area').innerText = areaSqKm.toFixed(2);
+        document.getElementById('pop-count').innerText = popEstimate.toLocaleString();
+    }
+
+    function shareWhatsApp() {
+        if (!currentResults) return;
+        const mapsLink = `https://www.google.com/maps/search/?api=1&query=${currentResults.lat},${currentResults.lng}`;
+        const text = `*דוח אירוע חומ"ס - ERG*\nחומר: ${currentResults.name} (${currentResults.un})\nמרחק בידוד: ${currentResults.isoDist}מ\nמרחק מגן: ${currentResults.protectDist}ק"מ\nאוכלוסייה בסיכון: ${document.getElementById('pop-count').innerText}\n\nמיקום: ${mapsLink}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    function exportKML() {
+        if (!currentResults) return;
+        function coordsToKml(coords) {
+            let ring = coords[0]; 
+            if (currentResults.protectGeo.geometry.type === "MultiPolygon") ring = currentResults.protectGeo.geometry.coordinates[0][0];
+            return ring.map(pt => `${pt[0]},${pt[1]},0`).join(" ");
+        }
+        const isoCoords = coordsToKml(currentResults.isoGeo.geometry.coordinates);
+        let protectCoords = currentResults.protectGeo.geometry.type === "MultiPolygon" ? coordsToKml(currentResults.protectGeo.geometry.coordinates[0]) : coordsToKml(currentResults.protectGeo.geometry.coordinates);
+        
+        const kmlContent = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ERG ${currentResults.un}</name><Style id="iso"><LineStyle><color>ff0000ff</color><width>2</width></LineStyle><PolyStyle><color>4d0000ff</color></PolyStyle></Style><Style id="pro"><LineStyle><color>ff00aaff</color><width>2</width></LineStyle><PolyStyle><color>4d00aaff</color></PolyStyle></Style><Placemark><name>Isolation</name><styleUrl>#iso</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>${isoCoords}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark><Placemark><name>Protection</name><styleUrl>#pro</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>${protectCoords}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>`;
+        const blob = new Blob([kmlContent], {type: 'application/vnd.google-earth.kml+xml'});
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `ERG_${currentResults.un}.kml`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    }
+</script>
+</body>
+</html>
