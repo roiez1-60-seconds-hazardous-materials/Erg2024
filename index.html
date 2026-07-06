@@ -5364,7 +5364,18 @@ function updateInfoPanel(info) {
         }).catch(() => { if(!isAuto) document.getElementById('wind-loader').style.display = 'none'; });
     }
 
-    document.getElementById('windDir').addEventListener('input', (e) => updateWindDisplay(parseInt(e.target.value)));
+    let _windLiveTimer = null;
+    document.getElementById('windDir').addEventListener('input', (e) => {
+        const deg = parseInt(e.target.value);
+        updateWindDisplay(deg);
+        // Live: dragging the wind slider re-orients the ERG zones (and the
+        // population-at-risk readout) to that direction immediately.
+        if (userMarker && selectedMat &&
+            document.getElementById('results-container').style.display === 'block') {
+            clearTimeout(_windLiveTimer);
+            _windLiveTimer = setTimeout(() => calculateAndDraw(true), 50);
+        }
+    });
     function updateWindDisplay(deg) {
         const dirs = ["צפון", "צפון-מזרח", "מזרח", "דרום-מזרח", "דרום", "דרום-מערב", "מערב", "צפון-מערב"];
         const idx = Math.round(((deg %= 360) < 0 ? deg + 360 : deg) / 45) % 8;
@@ -5434,8 +5445,8 @@ function updateInfoPanel(info) {
         } else { t3Div.style.display = 'none'; }
     }
 
-    function calculateAndDraw() {
-        if (!userMarker || !selectedMat) { alert("חסרים נתונים"); return; }
+    function calculateAndDraw(live = false) {
+        if (!userMarker || !selectedMat) { if (!live) alert("חסרים נתונים"); return; }
         const spillSize = document.getElementById('spillSize').value;
         const timeDay = document.getElementById('timeDay').value;
         const windDeg = parseInt(document.getElementById('windDir').value);
