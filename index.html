@@ -5313,29 +5313,33 @@ async function generatePlumePolygons() {
         const model = dispEngine.selectModel(selectedMat, meteoData);
         console.log('🔬 Selected model:', model);
         
-        updateStatus('מחשב פיזור עם מודל ' + model + '...');
-        
-        // Step 4: Calculate dispersion with physical model
-        // This combines measurements with physics
-        
-        const result = dispEngine.calculateDispersion({
+        updateStatus('משערך עוצמת-מקור מהמדידות...');
+
+        // Step 4: CORRECTED measurement-driven dispersion.
+        // Inverse Gaussian — fit source strength Q to the readings (least squares),
+        // then render a physically consistent Briggs-σ field. Uses the ENTERED wind.
+        const windFromDeg = parseInt(document.getElementById('windDir').value) || 0;
+        const windSpeed_ms = Math.max(1, ((meteoData && meteoData.windSpeed) ? meteoData.windSpeed : 10) / 3.6);
+        const field = dispEngine.calculateMeasurementField({
             source: { lat: ll.lat, lng: ll.lng },
             material: selectedMat,
             meteoData: meteoData,
             terrain: envData.terrain,
-            spillSize: 'medium', // default
-            stability: stability,
-            pgParams: pgParams
+            measurements: monitoringFeatures,
+            windFromDeg: windFromDeg,
+            windSpeed_ms: windSpeed_ms,
+            stability: stability
         });
-        
-        console.log('✅ Dispersion calculated:', result.grid.length, 'points');
-        
-        // Step 5: Blend with measurements
-        updateStatus('משלב עם מדידות...');
-        
-        const blendedGrid = blendWithMeasurements(result.grid, monitoringFeatures);
-        
-        console.log('✅ Blended grid:', blendedGrid.length, 'points');
+
+        if (!field.grid.length) {
+            if (loadingMsg) loadingMsg.remove();
+            alert('לא ניתן לשערך פיזור מהמדידות — ודא שנקודות הגלאים במורד-הרוח מהמוקד ושכיוון הרוח נכון.');
+            return;
+        }
+        console.log(`✅ Inverse Gaussian: Q=${field.Q.toExponential(2)} g/s | R²=${field.fit.r2.toFixed(2)} | U=${field.U.toFixed(1)} m/s | class ${field.stability}${field.urban ? ' (urban)' : ''}`);
+
+        updateStatus('מייצר שדה ריכוזים...');
+        const blendedGrid = field.grid;
         
         // Step 6: Create heatmap
         updateStatus('יוצר מפת חום...');
@@ -5370,12 +5374,14 @@ async function generatePlumePolygons() {
         
         // Step 7: Update info panel
         updateInfoPanel({
-            model: model,
+            model: field.model,
             meteo: meteoData,
             stability: stability,
             terrain: envData.terrain,
-            maxPPM: result.maxPPM,
-            avgPPM: result.avgPPM,
+            maxPPM: actualMaxPPM,
+            avgPPM: blendedGrid.reduce((s, p) => s + p.ppm, 0) / blendedGrid.length,
+            sourceQ: field.Q,
+            fitR2: field.fit.r2,
             material: selectedMat
         });
         
@@ -5669,9 +5675,11 @@ function updateInfoPanel(info) {
     
     const modelNames = {
         'GAUSSIAN': 'Gaussian Plume (light gas)',
+        'GAUSSIAN_INVERSE': 'Gaussian Plume — מכויל למדידות (Briggs σ, Q בריבועים פחותים)',
         'SLAB': 'SLAB (heavy gas)',
         'BRITTER_MCQUAID': 'Britter-McQuaid (heavy gas)'
     };
+    if (info.model && !modelNames[info.model]) modelNames[info.model] = info.model;
     
     panel.innerHTML = `
         <div style="font-weight:700;font-size:1.1rem;margin-bottom:10px;border-bottom:2px solid #667eea;padding-bottom:5px;">
@@ -6917,12 +6925,128 @@ class DispersionEngine {
         const exp_z2 = Math.exp(-0.5 * Math.pow((z + H) / sigma_z, 2));
         
         // ריכוז (kg/m³)
-        const C = (Q / (2 * Math.PI * u * sigma_y * sigma_z)) * 
+        const C = (Q / (2 * Math.PI * u * sigma_y * sigma_z)) *
                   exp_y * (exp_z1 + exp_z2);
-        
+
         return Math.max(0, C);
     }
-    
+
+    // ============================================================================
+    // CORRECTED MEASUREMENT-DRIVEN DISPERSION (Briggs σ + inverse least-squares Q)
+    // Refs: Turner (EPA 1970), Briggs (1973), ALOHA tech docs. Source strength is
+    // FIT to the ≥3 detector readings (Gaussian is linear in Q), so the rendered
+    // field is physically consistent AND passes through the measurements.
+    // ============================================================================
+
+    // Briggs (1973) dispersion coefficients. x in meters, returns σ in meters.
+    briggsSigma(cls, x, urban) {
+        if (x <= 0) return { sy: 1e-6, sz: 1e-6 };
+        const RUR = {
+            A: [s => 0.22 * s / Math.sqrt(1 + 1e-4 * s), s => 0.20 * s],
+            B: [s => 0.16 * s / Math.sqrt(1 + 1e-4 * s), s => 0.12 * s],
+            C: [s => 0.11 * s / Math.sqrt(1 + 1e-4 * s), s => 0.08 * s / Math.sqrt(1 + 2e-4 * s)],
+            D: [s => 0.08 * s / Math.sqrt(1 + 1e-4 * s), s => 0.06 * s / Math.sqrt(1 + 1.5e-3 * s)],
+            E: [s => 0.06 * s / Math.sqrt(1 + 1e-4 * s), s => 0.03 * s / (1 + 3e-4 * s)],
+            F: [s => 0.04 * s / Math.sqrt(1 + 1e-4 * s), s => 0.016 * s / (1 + 3e-4 * s)]
+        };
+        const URB = {
+            A: [s => 0.32 * s / Math.sqrt(1 + 4e-4 * s), s => 0.24 * s * Math.sqrt(1 + 1e-3 * s)],
+            B: [s => 0.32 * s / Math.sqrt(1 + 4e-4 * s), s => 0.24 * s * Math.sqrt(1 + 1e-3 * s)],
+            C: [s => 0.22 * s / Math.sqrt(1 + 4e-4 * s), s => 0.20 * s],
+            D: [s => 0.16 * s / Math.sqrt(1 + 4e-4 * s), s => 0.14 * s / Math.sqrt(1 + 3e-4 * s)],
+            E: [s => 0.11 * s / Math.sqrt(1 + 4e-4 * s), s => 0.08 * s / Math.sqrt(1 + 1.5e-4 * s)],
+            F: [s => 0.11 * s / Math.sqrt(1 + 4e-4 * s), s => 0.08 * s / Math.sqrt(1 + 1.5e-4 * s)]
+        };
+        const base = String(cls || 'D').replace('-', '').charAt(0).toUpperCase();
+        const t = (urban ? URB : RUR)[base] || (urban ? URB : RUR).D;
+        return { sy: t[0](x), sz: t[1](x) };
+    }
+
+    // Ground-level (z=0) unit-source concentration factor f = C/Q  [s/m³] at plume-frame (x,y)
+    _unitConc(x, y, U, cls, H, urban) {
+        if (x <= 0) return 0;
+        const { sy, sz } = this.briggsSigma(cls, x, urban);
+        const gy = Math.exp(-(y * y) / (2 * sy * sy));
+        const gz = 2 * Math.exp(-(H * H) / (2 * sz * sz)); // z=0: reflection doubles the term
+        return gy * gz / (2 * Math.PI * U * sy * sz);
+    }
+
+    // Inverse problem: least-squares source strength Q (g/s) from readings [{x,y,C_gm3}]
+    estimateQ(readings, U, cls, H, urban) {
+        let num = 0, den = 0, used = 0;
+        for (const r of readings) {
+            const f = this._unitConc(r.x, r.y, U, cls, H, urban);
+            if (!(f > 0)) continue;                       // upwind/off-plume detectors carry ~no info
+            const w = 1 / Math.max(r.C_gm3 * r.C_gm3, 1e-18); // relative-error weighting
+            num += w * r.C_gm3 * f;
+            den += w * f * f;
+            used++;
+        }
+        const Q = den > 0 ? num / den : NaN;
+        let sse = 0, sst = 0, mean = 0;
+        readings.forEach(r => mean += r.C_gm3); mean /= (readings.length || 1);
+        const resid = readings.map(r => {
+            const pred = Q * this._unitConc(r.x, r.y, U, cls, H, urban);
+            sse += (r.C_gm3 - pred) ** 2; sst += (r.C_gm3 - mean) ** 2;
+            return { measured: r.C_gm3, predicted: pred, x: r.x, y: r.y };
+        });
+        return { Q, used, resid, r2: sst > 0 ? 1 - sse / sst : 0 };
+    }
+
+    // Full corrected pipeline: rotate detectors → fit Q → render Gaussian field (grid in ppm).
+    calculateMeasurementField({ source, material, meteoData, terrain, measurements, windFromDeg, windSpeed_ms, stability }) {
+        const cls = stability || 'D';
+        const urban = !!(terrain && /urban|city|dense|בנ|עיר/i.test(terrain.description || ''));
+        const U = Math.max(1, windSpeed_ms || 3);          // floor low wind (model breaks < ~1 m/s)
+        const H = 0;                                       // ground-level hazmat release
+        const T = (meteoData && typeof meteoData.temperature === 'number') ? meteoData.temperature : 20;
+        const Vm = 22.414 * ((T + 273.15) / 273.15);       // molar volume L/mol at T, 1 atm
+        const ppmToGm3 = ppm => (ppm * material.mw / Vm) / 1000; // ppm→mg/m³→g/m³
+        const gm3ToPpm = c => (c * 1000) * Vm / material.mw;
+
+        // wind-frame rotation (φ_to = bearing the plume travels toward)
+        const phiTo = (((windFromDeg + 180) % 360)) * Math.PI / 180;
+        const Re = 6378137, cosLat = Math.cos(source.lat * Math.PI / 180);
+        const sinP = Math.sin(phiTo), cosP = Math.cos(phiTo);
+        const toPlume = (lat, lng) => {
+            const east = (lng - source.lng) * Math.PI / 180 * cosLat * Re;
+            const north = (lat - source.lat) * Math.PI / 180 * Re;
+            return { x: east * sinP + north * cosP, y: east * cosP - north * sinP };
+        };
+        const geoFrom = (x, y) => {                          // inverse rotation (matrix is involutory)
+            const east = x * sinP + y * cosP, north = x * cosP - y * sinP;
+            return { lat: source.lat + (north / Re) * 180 / Math.PI,
+                     lng: source.lng + (east / (Re * cosLat)) * 180 / Math.PI };
+        };
+
+        const readings = measurements.map(m => {
+            const [lng, lat] = m.geometry.coordinates;
+            const p = toPlume(lat, lng);
+            return { x: p.x, y: p.y, C_gm3: ppmToGm3(m.properties.intensity) };
+        });
+        const fit = this.estimateQ(readings, U, cls, H, urban);
+        const Q = fit.Q;
+        if (!(Q > 0)) return { grid: [], Q: 0, fit, model: 'GAUSSIAN_INVERSE', U, stability: cls, urban };
+
+        // sample the field in the plume frame, rotate each cell back to lat/lng
+        const grid = [];
+        const nx = 90, ny = 55, maxX = 9000, maxYcap = 3500;
+        for (let i = 1; i <= nx; i++) {
+            const x = Math.pow(i / nx, 1.4) * maxX;         // denser sampling near the source
+            const { sy } = this.briggsSigma(cls, x, urban);
+            const yMax = Math.min(maxYcap, 4 * sy);
+            for (let j = -ny; j <= ny; j++) {
+                const y = (j / ny) * yMax;
+                const C = Q * this._unitConc(x, y, U, cls, H, urban); // g/m³
+                const ppm = gm3ToPpm(C);
+                if (ppm < 0.01) continue;
+                const g = geoFrom(x, y);
+                grid.push({ lat: g.lat, lng: g.lng, ppm, concentration: C, distance: x });
+            }
+        }
+        return { grid, Q, fit, model: 'GAUSSIAN_INVERSE', U, stability: cls, urban };
+    }
+
     /**
      * מודל SLAB - גז כבד (מפורט)
      */
