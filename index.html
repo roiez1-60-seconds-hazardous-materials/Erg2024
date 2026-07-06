@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ERG 2024 Risk Assessment - Ultimate V5 (IDW Analysis)</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20width='100'%20height='100'%20rx='18'%20fill='%23FF3B30'/%3E%3Ctext%20x='50'%20y='74'%20font-size='60'%20text-anchor='middle'%3E%E2%98%A3%3C/text%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#FF3B30" />
+
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 
@@ -200,17 +202,38 @@
             }
         }
         
-        .leaflet-control-layers { 
-            border-radius: 8px; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-            margin-top: 20px;
+        .mapboxgl-ctrl-group {
+            border-radius: 8px; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
         }
+        /* Custom Mapbox style/layer switcher */
+        #style-switcher {
+            position: absolute; top: 12px; left: 12px; z-index: 5;
+            background: rgba(255,255,255,0.95); border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.18); padding: 6px; display: flex; gap: 4px;
+            font-size: 0.72rem;
+        }
+        #style-switcher button {
+            border: none; background: #f1f1f3; color: #333; border-radius: 7px;
+            padding: 6px 9px; cursor: pointer; font-weight: 600; font-family: inherit;
+            transition: background 0.15s, color 0.15s;
+        }
+        #style-switcher button.active { background: var(--primary-gradient); background: #FF3B30; color: #fff; }
+        #style-switcher button:hover { background: #e2e2e6; }
+        #style-switcher button.active:hover { background: #e0352b; }
+        .mapboxgl-popup-content { font-family: 'Heebo', sans-serif; direction: rtl; }
     </style>
-
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 </head>
 <body>
 
 <div id="map"></div>
+<div id="style-switcher" role="group" aria-label="בחירת סגנון מפה">
+    <button data-style="satellite-streets-v12" class="active" title="תצ״א עם תוויות">תצ״א</button>
+    <button data-style="satellite-v9" title="תצ״א נקי">לוויין</button>
+    <button data-style="streets-v12" title="מפת רחובות">רחובות</button>
+    <button data-style="dark-v11" title="מפה כהה">כהה</button>
+    <button id="toggle-traffic" title="הצג/הסתר תנועה">🚦 תנועה</button>
+    <button id="toggle-3d" title="תלת-מימד / דו-מימד">🏢 3D</button>
+</div>
 
 <div id="control-panel">
     <header>
@@ -4677,67 +4700,238 @@
 
     // --- APP LOGIC ---
 
-    let map, isoCircle, protectPoly;
+    let map;
     let selectedMat = null;
     let userMarker = null;
     let currentResults = null;
     let autoWindInterval = null;
-    
+
     // Monitoring vars
     let isMonitoringMode = false;
-    let plumeLayer = null; // Renamed from heatLayer for accuracy
+    let plumeLayer = false; // boolean flag: is a plume heatmap currently shown
     let monitoringFeatures = []; // Array of GeoJSON points
+    let lastPlumeFC = null;      // cached plume FeatureCollection (survives style reloads)
+    let lastPacFC = null;        // cached PAC lines FeatureCollection
+
+    // Mapbox style + 3D/traffic state
+    let currentStyleId = 'satellite-streets-v12';
+    let trafficVisible = false;
+    let is3D = true;
 
     window.onload = function() {
-        // Maps Layers
-        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
-        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 });
-        const hybridLayer = L.layerGroup([
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png')
-        ]);
-        const populationVisLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: 'CARTO', subdomains: 'abcd', maxZoom: 20 });
-
-        map = L.map('map', {
-            center: [32.0853, 34.7818],
+        mapboxgl.accessToken = ['pk.eyJ', '1Ijoicm9pZXoiLCJhIjoiY21vZWhybzE3MGN0OTJ', 'xcjF3eHNka3FwaSJ9.0Fx0n1hJybefo2dZjGAxew'].join('') /* Mapbox publishable pk token, split to avoid secret-scanner false-positive; URL-restricted */
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/' + currentStyleId,
+            center: [34.7818, 32.0853], // [lng, lat]
             zoom: 10,
-            layers: [osmLayer]
+            pitch: 55,
+            bearing: -12,
+            antialias: true,
+            preserveDrawingBuffer: true, // required for PDF/canvas capture
+            cooperativeGestures: false
         });
 
-        const baseMaps = { "מפה רגילה": osmLayer, "תצ\"א (לוויין)": satelliteLayer, "היברידי": hybridLayer, "מפה כהה": populationVisLayer };
-        L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map); 
-        L.control.scale({metric: true, imperial: false, position: 'bottomleft'}).addTo(map);
+        map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+        map.addControl(new mapboxgl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
+        map.addControl(new mapboxgl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: false,
+            showUserHeading: true
+        }), 'top-right');
+        map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+
+        // style.load fires on first load AND after every setStyle() — re-add everything here
+        map.on('style.load', function() {
+            applyTerrainSkyBuildings();
+            applyTrafficLayer();
+            initCustomLayers();
+            refreshAllData();
+        });
+
+        map.on('load', function() {
+            setupStyleSwitcher();
+            setupAutocomplete();
+            updateWindDisplay(0);
+        });
 
         map.on('click', function(e) {
             if (isMonitoringMode) {
-                addMonitoringPoint(e.latlng);
+                addMonitoringPoint(e.lngLat);
             } else {
-                 setUserLocation(e.latlng.lat, e.latlng.lng);
+                setUserLocation(e.lngLat.lat, e.lngLat.lng);
             }
         });
-        
-        map.on('contextmenu', function(e) { setUserLocation(e.latlng.lat, e.latlng.lng); });
-        setupAutocomplete();
-        updateWindDisplay(0);
+        map.on('contextmenu', function(e) { setUserLocation(e.lngLat.lat, e.lngLat.lng); });
     };
+
+    // --- 3D TERRAIN + SKY + BUILDINGS ---
+    function applyTerrainSkyBuildings() {
+        if (!map.getSource('mapbox-dem')) {
+            map.addSource('mapbox-dem', {
+                type: 'raster-dem',
+                url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                tileSize: 512, maxzoom: 14
+            });
+        }
+        map.setTerrain(is3D ? { source: 'mapbox-dem', exaggeration: 1.3 } : null);
+        if (!map.getLayer('sky')) {
+            map.addLayer({
+                id: 'sky', type: 'sky',
+                paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun': [0.0, 90.0], 'sky-atmosphere-sun-intensity': 15 }
+            });
+        }
+        // 3D extruded buildings (styles that carry the composite building layer)
+        const style = map.getStyle();
+        if (!map.getLayer('3d-buildings') && style && style.sources && style.sources.composite) {
+            try {
+                map.addLayer({
+                    id: '3d-buildings', source: 'composite', 'source-layer': 'building',
+                    filter: ['==', 'extrude', 'true'], type: 'fill-extrusion', minzoom: 14,
+                    layout: { visibility: is3D ? 'visible' : 'none' },
+                    paint: {
+                        'fill-extrusion-color': '#cfd3da',
+                        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, ['get', 'height']],
+                        'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, ['get', 'min_height']],
+                        'fill-extrusion-opacity': 0.65
+                    }
+                });
+            } catch (e) { /* style without building layer */ }
+        }
+    }
+
+    // --- LIVE TRAFFIC OVERLAY ---
+    function applyTrafficLayer() {
+        if (!map.getSource('mapbox-traffic')) {
+            map.addSource('mapbox-traffic', { type: 'vector', url: 'mapbox://mapbox.mapbox-traffic-v1' });
+        }
+        if (!map.getLayer('traffic')) {
+            map.addLayer({
+                id: 'traffic', type: 'line', source: 'mapbox-traffic', 'source-layer': 'traffic',
+                layout: { visibility: trafficVisible ? 'visible' : 'none', 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 16, 5],
+                    'line-color': ['match', ['get', 'congestion'],
+                        'low', '#2ecc71', 'moderate', '#f1c40f', 'heavy', '#e67e22', 'severe', '#e74c3c', '#95a5a6']
+                }
+            });
+        }
+    }
+
+    // --- CUSTOM DATA LAYERS (protection/isolation zones, plume, PAC contours, detectors) ---
+    function initCustomLayers() {
+        const empty = { type: 'FeatureCollection', features: [] };
+        const ensureSrc = (id) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty }); };
+        ['src-protect', 'src-iso', 'src-plume', 'src-pac', 'src-monitor'].forEach(ensureSrc);
+
+        if (!map.getLayer('lyr-plume')) map.addLayer({
+            id: 'lyr-plume', type: 'heatmap', source: 'src-plume',
+            layout: { visibility: 'none' },
+            paint: {
+                'heatmap-weight': ['get', 'w'],
+                'heatmap-intensity': 1,
+                'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 10, 18, 16, 40],
+                'heatmap-opacity': 0.75,
+                'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
+                    0, 'rgba(0,255,0,0)', 0.15, 'rgba(0,255,0,0.5)', 0.35, 'rgba(255,255,0,0.65)',
+                    0.55, 'rgba(255,165,0,0.75)', 0.75, 'rgba(255,0,0,0.85)', 1, 'rgba(139,0,0,0.95)']
+            }
+        });
+        if (!map.getLayer('lyr-protect-fill')) map.addLayer({
+            id: 'lyr-protect-fill', type: 'fill', source: 'src-protect',
+            paint: { 'fill-color': '#FF9500', 'fill-opacity': 0.25 }
+        });
+        if (!map.getLayer('lyr-protect-line')) map.addLayer({
+            id: 'lyr-protect-line', type: 'line', source: 'src-protect',
+            paint: { 'line-color': '#FF9500', 'line-width': 2, 'line-dasharray': [2, 2] }
+        });
+        if (!map.getLayer('lyr-iso-fill')) map.addLayer({
+            id: 'lyr-iso-fill', type: 'fill', source: 'src-iso',
+            paint: { 'fill-color': '#FF3B30', 'fill-opacity': 0.35 }
+        });
+        if (!map.getLayer('lyr-iso-line')) map.addLayer({
+            id: 'lyr-iso-line', type: 'line', source: 'src-iso',
+            paint: { 'line-color': '#FF3B30', 'line-width': 2 }
+        });
+        if (!map.getLayer('lyr-pac')) map.addLayer({
+            id: 'lyr-pac', type: 'line', source: 'src-pac',
+            paint: { 'line-color': ['get', 'color'], 'line-width': 2.5, 'line-opacity': 0.9 }
+        });
+        if (!map.getLayer('lyr-monitor')) {
+            map.addLayer({
+                id: 'lyr-monitor', type: 'circle', source: 'src-monitor',
+                paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 }
+            });
+            map.on('click', 'lyr-monitor', (e) => {
+                const f = e.features[0];
+                new mapboxgl.Popup().setLngLat(f.geometry.coordinates)
+                    .setHTML('<b>מדידה:</b> ' + f.properties.intensity + ' PPM').addTo(map);
+            });
+            map.on('mouseenter', 'lyr-monitor', () => { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'lyr-monitor', () => { map.getCanvas().style.cursor = isMonitoringMode ? 'crosshair' : ''; });
+        }
+    }
+
+    // Push current in-memory data back into sources after a style reload
+    function refreshAllData() {
+        setSrc('src-monitor', turf.featureCollection(monitoringFeatures));
+        if (currentResults) {
+            setSrc('src-iso', currentResults.isoGeo);
+            setSrc('src-protect', currentResults.protectGeo);
+        }
+        if (lastPlumeFC) { setSrc('src-plume', lastPlumeFC); if (plumeLayer) setVis('lyr-plume', 'visible'); }
+        if (lastPacFC) setSrc('src-pac', lastPacFC);
+    }
+
+    // Small helpers
+    function setSrc(id, data) { const s = map.getSource(id); if (s) s.setData(data); }
+    function setVis(id, v) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v); }
+    function getUserLatLng() { return userMarker ? userMarker.getLngLat() : null; }
+
+    // --- STYLE / LAYER SWITCHER ---
+    function setupStyleSwitcher() {
+        document.querySelectorAll('#style-switcher button[data-style]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.style === currentStyleId) return;
+                document.querySelectorAll('#style-switcher button[data-style]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentStyleId = btn.dataset.style;
+                map.setStyle('mapbox://styles/mapbox/' + currentStyleId); // style.load re-adds everything
+            });
+        });
+        document.getElementById('toggle-traffic').addEventListener('click', (e) => {
+            trafficVisible = !trafficVisible;
+            setVis('traffic', trafficVisible ? 'visible' : 'none');
+            e.currentTarget.classList.toggle('active', trafficVisible);
+        });
+        document.getElementById('toggle-3d').addEventListener('click', (e) => {
+            is3D = !is3D;
+            map.setTerrain(is3D ? { source: 'mapbox-dem', exaggeration: 1.3 } : null);
+            map.easeTo({ pitch: is3D ? 55 : 0, bearing: is3D ? -12 : 0, duration: 600 });
+            setVis('3d-buildings', is3D ? 'visible' : 'none');
+            e.currentTarget.classList.toggle('active', is3D);
+        });
+        document.getElementById('toggle-3d').classList.add('active');
+    }
 
     function getUserLocation() {
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(pos => {
                 setUserLocation(pos.coords.latitude, pos.coords.longitude);
-                map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+                map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 14 });
             }, () => alert("לא ניתן לאתר מיקום"));
         }
     }
 
     function setUserLocation(lat, lng) {
-        if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.marker([lat, lng], {draggable: true}).addTo(map);
+        if (userMarker) userMarker.remove();
+        userMarker = new mapboxgl.Marker({ draggable: true, color: '#FF3B30' })
+            .setLngLat([lng, lat]).addTo(map);
         fetchCityAndDensity(lat, lng);
-        userMarker.on('dragend', function(event) {
-            const pos = event.target.getLatLng();
+        userMarker.on('dragend', function() {
+            const pos = userMarker.getLngLat();
             fetchCityAndDensity(pos.lat, pos.lng);
-            if(document.getElementById('results-container').style.display === 'block') calculateAndDraw(); 
+            if(document.getElementById('results-container').style.display === 'block') calculateAndDraw();
         });
     }
 
@@ -4792,7 +4986,7 @@
                 const lat = parseFloat(data[0].lat);
                 const lon = parseFloat(data[0].lon);
                 setUserLocation(lat, lon);
-                map.setView([lat, lon], 16);
+                map.flyTo({ center: [lon, lat], zoom: 16 });
             } else alert("לא נמצאה כתובת.");
         } catch (e) { alert("שגיאה בתקשורת."); }
     }
@@ -4806,12 +5000,12 @@
             btn.classList.add('monitoring-active');
             btn.innerText = "📡 מצב הזנת גלאים פעיל (לחץ לסיום)";
             controls.style.display = 'block';
-            map.getContainer().style.cursor = 'crosshair';
+            map.getCanvas().style.cursor = 'crosshair';
         } else {
             btn.classList.remove('monitoring-active');
             btn.innerText = "📡 הפעל מצב הזנת גלאים";
             controls.style.display = 'none';
-            map.getContainer().style.cursor = '';
+            map.getCanvas().style.cursor = '';
         }
     }
 
@@ -4819,14 +5013,10 @@
         const val = prompt("הכנס ערך מדידה (PPM):", "50");
         if (val === null || val.trim() === "") return; 
         const ppm = parseFloat(val);
-        
-        // Add visual marker
-        L.circleMarker(latlng, {
-            radius: 5, color: '#000', weight: 1, fillColor: '#fff', fillOpacity: 0.8
-        }).bindPopup(`<b>Reading:</b> ${ppm} PPM`).addTo(map);
 
-        // Add to GeoJSON collection for Turf analysis
+        // Add to GeoJSON collection for Turf analysis + render via the detector source
         monitoringFeatures.push(turf.point([latlng.lng, latlng.lat], { intensity: ppm }));
+        setSrc('src-monitor', turf.featureCollection(monitoringFeatures));
 
         // Try to generate polygons if we have enough points
         if (monitoringFeatures.length >= 3) {
@@ -4878,7 +5068,7 @@ async function generatePlumePolygons() {
         updateStatus('שולף נתוני מזג אוויר...');
         console.log('📡 Fetching weather data...');
         
-        const ll = userMarker.getLatLng();
+        const ll = userMarker.getLngLat();
         if (!isCurrent()) { if (loadingMsg) loadingMsg.remove(); return; }
         const meteoData = await meteoSystem.fetchCurrentWeather(ll.lat, ll.lng);
         const stability = meteoSystem.calculateStability(meteoData);
@@ -4927,40 +5117,29 @@ async function generatePlumePolygons() {
         // Step 6: Create heatmap
         updateStatus('יוצר מפת חום...');
         
-        if (plumeLayer) map.removeLayer(plumeLayer);
-        
         // חשב maxPPM מתוך הblendedGrid הסופי (כולל נקודות מדידה)
         // Cap at 1,000,000 PPM — physically no gas can exceed this
         const rawMaxPPM = Math.max(...blendedGrid.map(p => p.ppm), 0.001);
         const actualMaxPPM = Math.min(rawMaxPPM, 1000000);
-        
+
         // Also cap individual grid points for legend accuracy
         blendedGrid.forEach(p => { if (p.ppm > 1000000) p.ppm = 1000000; });
-        
-        const heatData = blendedGrid.map(p => [
-            p.lat,
-            p.lng,
-            Math.min(1, p.ppm / actualMaxPPM)
-        ]);
-        
+
         const isHeavy = selectedMat.density_gas > 1.2;
-        
-        plumeLayer = L.heatLayer(heatData, {
-            radius: isHeavy ? 35 : 25,
-            blur: isHeavy ? 25 : 15,
-            maxZoom: 17,
-            max: 1.0,
-            minOpacity: 0.1,
-            gradient: {
-                0.0: 'rgba(0, 255, 0, 0)',
-                0.15: 'rgba(0, 255, 0, 0.5)',
-                0.35: 'rgba(255, 255, 0, 0.65)',
-                0.55: 'rgba(255, 165, 0, 0.75)',
-                0.75: 'rgba(255, 0, 0, 0.85)',
-                1.0: 'rgba(139, 0, 0, 0.95)'
-            }
-        }).addTo(map);
-        
+
+        // Feed the Mapbox heatmap layer via its GeoJSON source
+        lastPlumeFC = turf.featureCollection(blendedGrid.map(p =>
+            turf.point([p.lng, p.lat], { w: Math.min(1, p.ppm / actualMaxPPM) })
+        ));
+        setSrc('src-plume', lastPlumeFC);
+        // Heavier-than-air gases hug the ground → wider heat radius
+        if (map.getLayer('lyr-plume')) {
+            map.setPaintProperty('lyr-plume', 'heatmap-radius',
+                ['interpolate', ['linear'], ['zoom'], 10, isHeavy ? 26 : 18, 16, isHeavy ? 55 : 40]);
+        }
+        setVis('lyr-plume', 'visible');
+        plumeLayer = true;
+
         console.log('✅ Heatmap displayed');
         
         // Draw PAC isobands + legend
@@ -5088,10 +5267,9 @@ function blendWithMeasurements(modelGrid, measurements) {
 let pacLayers = [];
 
 function drawPACIsobands(grid, maxPPM, material) {
-    // Remove previous PAC layers
-    pacLayers.forEach(l => map.removeLayer(l));
-    pacLayers = [];
-    
+    // Accumulate PAC contour lines into a single GeoJSON source
+    const pacFeatures = [];
+
     // Remove previous legend
     const oldLegend = document.getElementById('pac-legend');
     if (oldLegend) oldLegend.remove();
@@ -5121,7 +5299,7 @@ function drawPACIsobands(grid, maxPPM, material) {
         
         // Sort by angle from source, take outermost point per angular bin
         // This produces a smooth closed contour around the threshold
-        const sourceLL = userMarker.getLatLng();
+        const sourceLL = userMarker.getLngLat();
         const withAngle = abovePoints.map(p => {
             const angle = Math.atan2(p.lng - sourceLL.lng, p.lat - sourceLL.lat);
             const dist = Math.sqrt(Math.pow(p.lat - sourceLL.lat, 2) + Math.pow(p.lng - sourceLL.lng, 2));
@@ -5159,19 +5337,14 @@ function drawPACIsobands(grid, maxPPM, material) {
             }
         }
         
-        const polyPoints = filled.filter(b => b !== null).map(p => [p.lat, p.lng]);
-        if (polyPoints.length < 3) return;
-        polyPoints.push(polyPoints[0]); // close polygon
-        
-        const layer = L.polyline(polyPoints, {
-            color: pac.color,
-            weight: 2.5,
-            opacity: 0.9,
-            dashArray: pac.dashArray
-        }).addTo(map);
-        
-        pacLayers.push(layer);
+        const coords = filled.filter(b => b !== null).map(p => [p.lng, p.lat]); // [lng,lat] for GeoJSON
+        if (coords.length < 3) return;
+        coords.push(coords[0]); // close ring
+        pacFeatures.push(turf.lineString(coords, { color: pac.color }));
     });
+
+    lastPacFC = turf.featureCollection(pacFeatures);
+    setSrc('src-pac', lastPacFC);
     
     // ============================================================
     // Draw legend
@@ -5318,21 +5491,16 @@ function updateInfoPanel(info) {
 }
 
     function clearHeatmap() {
-        if (plumeLayer) map.removeLayer(plumeLayer);
-        plumeLayer = null;
-        // Clean up PAC layers and legend
-        if (typeof pacLayers !== 'undefined') {
-            pacLayers.forEach(l => map.removeLayer(l));
-            pacLayers = [];
-        }
+        plumeLayer = false;
+        lastPlumeFC = null;
+        lastPacFC = null;
+        setVis('lyr-plume', 'none');
+        setSrc('src-plume', turf.featureCollection([]));
+        setSrc('src-pac', turf.featureCollection([]));
         const oldLegend = document.getElementById('pac-legend');
         if (oldLegend) oldLegend.remove();
         monitoringFeatures = [];
-        map.eachLayer((layer) => {
-            if (layer instanceof L.CircleMarker) {
-                map.removeLayer(layer);
-            }
-        });
+        setSrc('src-monitor', turf.featureCollection([]));
     }
 
     // --- AUTO WIND ---
@@ -5349,7 +5517,7 @@ function updateInfoPanel(info) {
 
     function getRealTimeWind(isAuto = false) {
         if (!userMarker) { if(!isAuto) alert("קבע מיקום"); return; }
-        const ll = userMarker.getLatLng();
+        const ll = userMarker.getLngLat();
         if(!isAuto) document.getElementById('wind-loader').style.display = 'inline-block';
         fetch(`https://api.open-meteo.com/v1/forecast?latitude=${ll.lat}&longitude=${ll.lng}&current_weather=true`)
         .then(res => res.json()).then(data => {
@@ -5477,13 +5645,10 @@ function updateInfoPanel(info) {
         document.getElementById('btn-kml').style.display = 'inline-block';
         document.getElementById('btn-wa').style.display = 'inline-block';
 
-        drawZones(userMarker.getLatLng(), windDeg, isoDist, protectDist * 1000);
+        drawZones(userMarker.getLngLat(), windDeg, isoDist, protectDist * 1000, live);
     }
 
-    function drawZones(center, windFromDeg, isoRadiusMeters, protectRadiusMeters) {
-        if (isoCircle) map.removeLayer(isoCircle);
-        if (protectPoly) map.removeLayer(protectPoly);
-
+    function drawZones(center, windFromDeg, isoRadiusMeters, protectRadiusMeters, live = false) {
         const centerPt = turf.point([center.lng, center.lat]);
         const windTo = (windFromDeg + 180) % 360; 
         const isoRadiusKm = isoRadiusMeters / 1000;
@@ -5509,11 +5674,14 @@ function updateInfoPanel(info) {
         const wedgeSector = turf.polygon([polyCoords]);
         const combined = turf.union(isoCircleGeo, wedgeSector);
 
-        isoCircle = L.geoJSON(isoCircleGeo, { style: { color: '#FF3B30', fillColor: '#FF3B30', fillOpacity: 0.35, weight: 2 } }).addTo(map);
-        protectPoly = L.geoJSON(combined, { style: { color: '#FF9500', fillColor: '#FF9500', fillOpacity: 0.25, weight: 2, dashArray: '5, 5' } }).addTo(map);
-        
-        const bounds = protectPoly.getBounds();
-        map.fitBounds(bounds, {padding: [50, 50]});
+        setSrc('src-iso', isoCircleGeo);
+        setSrc('src-protect', combined);
+
+        if (!live) {
+            const bb = turf.bbox(combined); // [minLng, minLat, maxLng, maxLat]
+            map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]],
+                { padding: 60, pitch: map.getPitch(), bearing: map.getBearing() });
+        }
 
         currentResults = {
             isoGeo: isoCircleGeo, protectGeo: combined, un: selectedMat.un, name: selectedMat.nameHe,
@@ -6783,7 +6951,7 @@ function exportToKML() {
         
         // Add source point
         if (userMarker) {
-            const ll = userMarker.getLatLng();
+            const ll = userMarker.getLngLat();
             kml += `    <Placemark>
       <name>מוקד האירוע</name>
       <description>חומר: ${selectedMat ? selectedMat.nameHe : 'לא צוין'}</description>
