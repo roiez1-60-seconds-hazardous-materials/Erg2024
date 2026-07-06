@@ -10,6 +10,7 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 
     <style>
@@ -221,6 +222,15 @@
         #style-switcher button:hover { background: #e2e2e6; }
         #style-switcher button.active:hover { background: #e0352b; }
         .mapboxgl-popup-content { font-family: 'Heebo', sans-serif; direction: rtl; }
+        .team-member-row { display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #f0f0f0; }
+        .team-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .team-inzone { color:#b91c1c; font-weight:700; }
+        #geofence-alert { display:none; margin-top:10px; padding:12px 14px; border-radius:10px;
+            background:#b91c1c; color:#fff; font-weight:700; text-align:center; box-shadow:0 3px 12px rgba(185,28,28,0.4);
+            animation: geofence-pulse 1s ease-in-out infinite; }
+        #geofence-alert.show { display:block; }
+        @keyframes geofence-pulse { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.04); } }
+        @media (prefers-reduced-motion: reduce) { #geofence-alert { animation:none; } }
     </style>
 </head>
 <body>
@@ -340,6 +350,24 @@
         </div>
         <button class="tool-btn" style="font-size:0.8rem; padding:6px; margin-top:5px;" onclick="clearHeatmap()">🗑️ נקה גלאים</button>
     </div>
+
+    <div class="section-label">👥 מעקב צוות בזמן אמת</div>
+    <div id="team-panel">
+        <div id="team-join">
+            <input type="text" id="team-name" placeholder="שם / כינוי" autocomplete="off" aria-label="שם איש צוות" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid #ddd; border-radius:8px; font-family:inherit; font-size:0.85rem;">
+            <input type="text" id="team-room" placeholder="מפתח חדר משותף (למשל: incident-42)" autocomplete="off" aria-label="מפתח חדר" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid #ddd; border-radius:8px; font-family:inherit; font-size:0.85rem;">
+            <button id="btn-team-join" class="tool-btn" style="width:100%" onclick="teamJoin()">🔗 הצטרף ושתף מיקום</button>
+            <div style="font-size:0.68rem; color:var(--text-secondary); margin-top:5px; line-height:1.4;">מצב לייט: ערוץ ציבורי לפי מפתח-חדר (לא פרטי לחלוטין). כל מי שיודע את המפתח רואה מיקומים. לשדרוג לערוץ פרטי — Supabase.</div>
+        </div>
+        <div id="team-active" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                <span id="team-status" style="font-size:0.82rem;">מחובר: <b id="team-room-label"></b></span>
+                <button class="tool-btn" style="width:auto; padding:4px 10px; font-size:0.75rem;" onclick="teamLeave()">נתק</button>
+            </div>
+            <div id="team-members" style="margin-top:8px; font-size:0.82rem;"></div>
+        </div>
+    </div>
+    <div id="geofence-alert" role="alert" aria-live="assertive"></div>
 
     <div id="table3-warning" class="warning-box">
         <strong>⚠️ שים לב:</strong> הנתונים נלקחו מטבלה 3 (גזים רעילים). וודא שסוג המכל ומהירות הרוח נכונים.
@@ -4826,7 +4854,7 @@
     function initCustomLayers() {
         const empty = { type: 'FeatureCollection', features: [] };
         const ensureSrc = (id) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty }); };
-        ['src-protect', 'src-iso', 'src-plume', 'src-pac', 'src-monitor'].forEach(ensureSrc);
+        ['src-protect', 'src-iso', 'src-plume', 'src-pac', 'src-monitor', 'src-team'].forEach(ensureSrc);
 
         if (!map.getLayer('lyr-plume')) map.addLayer({
             id: 'lyr-plume', type: 'heatmap', source: 'src-plume',
@@ -4861,6 +4889,23 @@
             id: 'lyr-pac', type: 'line', source: 'src-pac',
             paint: { 'line-color': ['get', 'color'], 'line-width': 2.5, 'line-opacity': 0.9 }
         });
+        // Team members: colored dot (red if inside a hazard zone) + name label
+        if (!map.getLayer('lyr-team')) map.addLayer({
+            id: 'lyr-team', type: 'circle', source: 'src-team',
+            paint: {
+                'circle-radius': 7,
+                'circle-color': ['case', ['get', 'inZone'], '#b91c1c', ['get', 'me'], '#2563eb', '#059669'],
+                'circle-stroke-color': '#fff', 'circle-stroke-width': 2
+            }
+        });
+        if (!map.getLayer('lyr-team-label')) map.addLayer({
+            id: 'lyr-team-label', type: 'symbol', source: 'src-team',
+            layout: {
+                'text-field': ['get', 'name'], 'text-size': 12, 'text-offset': [0, 1.2],
+                'text-anchor': 'top', 'text-allow-overlap': false
+            },
+            paint: { 'text-color': '#111', 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
+        });
         if (!map.getLayer('lyr-monitor')) {
             map.addLayer({
                 id: 'lyr-monitor', type: 'circle', source: 'src-monitor',
@@ -4879,6 +4924,7 @@
     // Push current in-memory data back into sources after a style reload
     function refreshAllData() {
         setSrc('src-monitor', turf.featureCollection(monitoringFeatures));
+        if (typeof TEAM !== 'undefined' && TEAM.connected) _teamRender();
         if (currentResults) {
             setSrc('src-iso', currentResults.isoGeo);
             setSrc('src-protect', currentResults.protectGeo);
@@ -4916,6 +4962,140 @@
             e.currentTarget.classList.toggle('active', is3D);
         });
         document.getElementById('toggle-3d').classList.add('active');
+    }
+
+    // ================= TEAM TRACKING (real-time) + ZONE-ENTRY ALERT =================
+    // Transport-abstracted: "lite" mode uses a public MQTT broker keyed by room (no backend).
+    // Swappable to Supabase Realtime later — replace makeLiteTransport with a Supabase transport.
+    const TEAM = { connected: false, room: null, meId: null, meName: null, members: {}, watchId: null, transport: null, lastPub: 0 };
+
+    function _teamRender() {
+        const feats = Object.values(TEAM.members)
+            .filter(m => typeof m.lng === 'number')
+            .map(m => turf.point([m.lng, m.lat], { name: m.name || '?', me: !!m.me, inZone: !!m.inZone, id: m.id }));
+        setSrc('src-team', turf.featureCollection(feats));
+        const box = document.getElementById('team-members');
+        if (box) {
+            const rows = Object.values(TEAM.members).sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0)).map(m => {
+                const color = m.inZone ? '#b91c1c' : (m.me ? '#2563eb' : '#059669');
+                const zone = m.inZone ? ' <span class="team-inzone">⚠️ באזור סכנה</span>' : '';
+                return `<div class="team-member-row"><span class="team-dot" style="background:${color}"></span><span>${m.name || '?'}${m.me ? ' (אני)' : ''}${zone}</span></div>`;
+            }).join('');
+            box.innerHTML = rows || '<div style="color:#888;">אין חברי צוות מחוברים עדיין…</div>';
+        }
+    }
+
+    function _teamBeep() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.connect(g); g.connect(ctx.destination);
+            o.type = 'square'; o.frequency.value = 880; g.gain.value = 0.12;
+            o.start(); o.stop(ctx.currentTime + 0.25);
+        } catch (e) { /* audio unavailable */ }
+    }
+
+    function _teamAlert(m) {
+        const who = m.me ? 'אתה' : (m.name || 'איש צוות');
+        const el = document.getElementById('geofence-alert');
+        if (el) {
+            el.innerText = `⚠️ ${who} נכנס/ה לאזור סכנה!`;
+            el.classList.add('show');
+            clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 8000);
+        }
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+        _teamBeep();
+    }
+
+    // Edge-triggered geofence: fire only on transition outside→inside a hazard zone
+    function _teamCheckGeofence(m) {
+        let inside = false;
+        if (currentResults && typeof m.lng === 'number') {
+            const pt = [m.lng, m.lat];
+            try {
+                if (currentResults.protectGeo && turf.booleanPointInPolygon(pt, currentResults.protectGeo)) inside = true;
+                else if (currentResults.isoGeo && turf.booleanPointInPolygon(pt, currentResults.isoGeo)) inside = true;
+            } catch (e) { /* geometry not ready */ }
+        }
+        const was = !!m.inZone;
+        m.inZone = inside;
+        if (inside && !was) _teamAlert(m);
+        return inside;
+    }
+
+    // Re-check all members (called after zones move / recompute)
+    function checkAllGeofences() {
+        Object.values(TEAM.members).forEach(_teamCheckGeofence);
+        _teamRender();
+    }
+
+    function _teamOnPosition(pos) {
+        const m = TEAM.members[TEAM.meId] || (TEAM.members[TEAM.meId] = { id: TEAM.meId, name: TEAM.meName, me: true });
+        m.lng = pos.coords.longitude; m.lat = pos.coords.latitude; m.ts = Date.now();
+        _teamCheckGeofence(m);
+        _teamRender();
+        if (TEAM.transport && Date.now() - TEAM.lastPub > 2500) {
+            TEAM.lastPub = Date.now();
+            TEAM.transport.publish({ id: m.id, name: m.name, lng: m.lng, lat: m.lat, ts: m.ts });
+        }
+    }
+
+    function _teamOnRemote(msg) {
+        if (!msg || msg.id === TEAM.meId) return;
+        const m = TEAM.members[msg.id] || (TEAM.members[msg.id] = { id: msg.id });
+        m.name = msg.name; m.lng = msg.lng; m.lat = msg.lat; m.ts = msg.ts || Date.now(); m.me = false;
+        _teamCheckGeofence(m);
+        _teamRender();
+    }
+
+    function teamJoin() {
+        const name = (document.getElementById('team-name').value || '').trim();
+        const room = (document.getElementById('team-room').value || '').trim();
+        if (!name || !room) { alert('נא למלא שם ומפתח חדר'); return; }
+        TEAM.meName = name; TEAM.room = room;
+        TEAM.meId = 'u' + Math.random().toString(36).slice(2, 9);
+        TEAM.transport = makeLiteTransport(room);
+        TEAM.transport.connect(() => {
+            TEAM.connected = true;
+            document.getElementById('team-join').style.display = 'none';
+            document.getElementById('team-active').style.display = 'block';
+            document.getElementById('team-room-label').innerText = room;
+            if (navigator.geolocation) {
+                TEAM.watchId = navigator.geolocation.watchPosition(_teamOnPosition,
+                    e => console.warn('geo err', e && e.message), { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
+            }
+            _teamRender();
+        }, _teamOnRemote);
+    }
+
+    function teamLeave() {
+        if (TEAM.watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(TEAM.watchId);
+        if (TEAM.transport) TEAM.transport.disconnect();
+        TEAM.connected = false; TEAM.members = {}; TEAM.watchId = null; TEAM.transport = null;
+        document.getElementById('team-join').style.display = 'block';
+        document.getElementById('team-active').style.display = 'none';
+        const ga = document.getElementById('geofence-alert'); if (ga) ga.classList.remove('show');
+        setSrc('src-team', turf.featureCollection([]));
+        document.getElementById('team-members').innerHTML = '';
+    }
+
+    // --- LITE TRANSPORT: public MQTT broker over WSS, topic scoped by room key ---
+    function makeLiteTransport(room) {
+        const topic = 'erg2024/team/' + encodeURIComponent(room);
+        let client = null;
+        return {
+            connect(onReady, onMsg) {
+                client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+                    clientId: 'erg2024_' + Math.random().toString(16).slice(2, 10),
+                    reconnectPeriod: 3000, connectTimeout: 8000
+                });
+                client.on('connect', () => client.subscribe(topic, () => onReady && onReady()));
+                client.on('message', (t, payload) => { try { onMsg(JSON.parse(payload.toString())); } catch (e) { } });
+                client.on('error', e => console.warn('mqtt err', e && e.message));
+            },
+            publish(msg) { if (client && client.connected) client.publish(topic, JSON.stringify(msg)); },
+            disconnect() { if (client) { try { client.end(true); } catch (e) { } client = null; } }
+        };
     }
 
     function getUserLocation() {
@@ -5692,6 +5872,7 @@ function updateInfoPanel(info) {
             isoDist: isoRadiusMeters, protectDist: protectDistKm, lat: center.lat, lng: center.lng, windDeg: windFromDeg
         };
         updatePopulationEst();
+        if (typeof checkAllGeofences === 'function') checkAllGeofences();
     }
 
     // ============ REAL SPATIAL POPULATION — WorldPop Israel 1km grid (2020) ============
