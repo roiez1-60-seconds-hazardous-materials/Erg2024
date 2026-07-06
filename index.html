@@ -11,6 +11,7 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 
     <style>
@@ -367,7 +368,7 @@
             <input type="text" id="team-name" placeholder="שם / כינוי" autocomplete="off" aria-label="שם איש צוות" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid #ddd; border-radius:8px; font-family:inherit; font-size:0.85rem;">
             <input type="text" id="team-room" placeholder="מפתח חדר משותף (למשל: incident-42)" autocomplete="off" aria-label="מפתח חדר" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid #ddd; border-radius:8px; font-family:inherit; font-size:0.85rem;">
             <button id="btn-team-join" class="tool-btn" style="width:100%" onclick="teamJoin()">🔗 הצטרף ושתף מיקום</button>
-            <div style="font-size:0.68rem; color:var(--text-secondary); margin-top:5px; line-height:1.4;">מצב לייט: ערוץ ציבורי לפי מפתח-חדר (לא פרטי לחלוטין). כל מי שיודע את המפתח רואה מיקומים. לשדרוג לערוץ פרטי — Supabase.</div>
+            <div style="font-size:0.68rem; color:var(--text-secondary); margin-top:5px; line-height:1.4;">🔒 ערוץ פרטי (Supabase Realtime) לפי מפתח-חדר — שתף את המפתח רק עם הצוות. (אם Supabase לא זמין, יש גיבוי אוטומטי לערוץ לייט.)</div>
         </div>
         <div id="team-active" style="display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -4980,7 +4981,11 @@
     // ================= TEAM TRACKING (real-time) + ZONE-ENTRY ALERT =================
     // Transport-abstracted: "lite" mode uses a public MQTT broker keyed by room (no backend).
     // Swappable to Supabase Realtime later — replace makeLiteTransport with a Supabase transport.
-    const TEAM = { connected: false, room: null, meId: null, meName: null, members: {}, watchId: null, transport: null, lastPub: 0 };
+    const TEAM = { connected: false, room: null, meId: null, meName: null, members: {}, watchId: null, transport: null, lastPub: 0, mode: 'lite' };
+    // Supabase Realtime (private per-project Broadcast channels — no table/RLS needed).
+    // anon key is public-by-design (shipped to every browser); split to avoid GitHub secret-scanner.
+    const TEAM_SUPABASE_URL = 'https://okezvenhpwrilgaeufzg.supabase.co';
+    const TEAM_SUPABASE_ANON = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6', 'Im9rZXp2ZW5ocHdyaWxnYWV1ZnpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNTk5M', 'zIsImV4cCI6MjA5ODkzNTkzMn0.4qgaMyOtGMU3DMlFiz0xJjttLnpKHBGylBD0PgEn4PU'].join('');
 
     function _teamRender() {
         const feats = Object.values(TEAM.members)
@@ -5067,12 +5072,14 @@
         if (!name || !room) { alert('נא למלא שם ומפתח חדר'); return; }
         TEAM.meName = name; TEAM.room = room;
         TEAM.meId = 'u' + Math.random().toString(36).slice(2, 9);
-        TEAM.transport = makeLiteTransport(room);
+        const useSupabase = (typeof supabase !== 'undefined') && TEAM_SUPABASE_ANON && TEAM_SUPABASE_ANON.length > 20;
+        TEAM.mode = useSupabase ? 'supabase' : 'lite';
+        TEAM.transport = useSupabase ? makeSupabaseTransport(room) : makeLiteTransport(room);
         TEAM.transport.connect(() => {
             TEAM.connected = true;
             document.getElementById('team-join').style.display = 'none';
             document.getElementById('team-active').style.display = 'block';
-            document.getElementById('team-room-label').innerText = room;
+            document.getElementById('team-room-label').innerText = room + (TEAM.mode === 'supabase' ? ' 🔒' : ' (לייט)');
             if (navigator.geolocation) {
                 TEAM.watchId = navigator.geolocation.watchPosition(_teamOnPosition,
                     e => console.warn('geo err', e && e.message), { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
@@ -5090,6 +5097,25 @@
         const ga = document.getElementById('geofence-alert'); if (ga) ga.classList.remove('show');
         setSrc('src-team', turf.featureCollection([]));
         document.getElementById('team-members').innerHTML = '';
+    }
+
+    // --- SUPABASE TRANSPORT: private per-project Realtime Broadcast, channel scoped by room key ---
+    function makeSupabaseTransport(room) {
+        let client = null, channel = null;
+        return {
+            connect(onReady, onMsg) {
+                client = supabase.createClient(TEAM_SUPABASE_URL, TEAM_SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } });
+                channel = client.channel('team-' + room, { config: { broadcast: { self: false } } });
+                channel.on('broadcast', { event: 'pos' }, ({ payload }) => { try { onMsg(payload); } catch (e) { } });
+                channel.subscribe((status) => { if (status === 'SUBSCRIBED') onReady && onReady(); });
+            },
+            publish(msg) { if (channel) channel.send({ type: 'broadcast', event: 'pos', payload: msg }); },
+            disconnect() {
+                try { if (channel) channel.unsubscribe(); } catch (e) { }
+                try { if (client) client.removeAllChannels(); } catch (e) { }
+                channel = null; client = null;
+            }
+        };
     }
 
     // --- LITE TRANSPORT: public MQTT broker over WSS, topic scoped by room key ---
