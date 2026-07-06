@@ -5750,9 +5750,29 @@ function updateInfoPanel(info) {
                 document.getElementById('windDir').value = windDir;
                 updateWindDisplay(windDir);
                 document.getElementById('weather-status').innerText = `רוח: ${data.current_weather.windspeed} קמ"ש, כיוון ${windDir}°`;
-                if (isAuto && document.getElementById('results-container').style.display === 'block') calculateAndDraw();
+                if (isAuto && document.getElementById('results-container').style.display === 'block') {
+                    // Stage 6: detect a significant wind shift vs the direction the zones were drawn with
+                    const prevDeg = currentResults ? currentResults.windDeg : windDir;
+                    calculateAndDraw(); // redraws zones with the new wind + re-checks geofences
+                    const shift = _angDiff(prevDeg, windDir);
+                    if (shift >= WIND_SHIFT_THRESHOLD) windShiftAlarm(shift, prevDeg, windDir);
+                }
             }
         }).catch(() => { if(!isAuto) document.getElementById('wind-loader').style.display = 'none'; });
+    }
+
+    // --- Stage 6: live-incident wind-shift alarm ---
+    const WIND_SHIFT_THRESHOLD = 20; // degrees
+    function _angDiff(a, b) { const d = Math.abs(((a - b) % 360 + 360) % 360); return Math.min(d, 360 - d); }
+    function windShiftAlarm(shift, from, to) {
+        const el = document.getElementById('geofence-alert');
+        if (el) {
+            el.innerText = `🌬️ הרוח השתנתה ${Math.round(shift)}° (מ-${Math.round(from)}° ל-${Math.round(to)}°) — האזורים עודכנו!`;
+            el.classList.add('show');
+            clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 9000);
+        }
+        if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
+        if (typeof _teamBeep === 'function') _teamBeep();
     }
 
     let _windLiveTimer = null;
