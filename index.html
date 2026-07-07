@@ -16,17 +16,21 @@
 
     <style>
         :root {
+            /* Hazard colors — used ONLY for danger zones / alerts on the map, never for chrome */
             --red: #FF3B30; --orange: #FF9500;
-            --primary-gradient: linear-gradient(135deg, #FF5A4D 0%, #FF9F0A 100%);
-            --glass-bg: rgba(255, 255, 255, 0.72);
-            --glass-border: rgba(255, 255, 255, 0.7);
-            --card-bg: rgba(255, 255, 255, 0.92);
-            --fill: #EFEFF4; --fill-2: #E9E9EE;
-            --separator: rgba(60, 60, 67, 0.12);
+            /* Professional graphite + blue chrome */
+            --accent: #1366E8; --accent-strong: #0B4FC0; --accent-soft: rgba(19,102,232,0.1);
+            --primary-gradient: linear-gradient(135deg, #2E7BFF 0%, #0B57E0 100%);
+            --graphite: #1C1C1E; --graphite-2: #3A3A3C;
+            --glass-bg: rgba(255, 255, 255, 0.78);
+            --glass-border: rgba(255, 255, 255, 0.75);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --fill: #F1F2F4; --fill-2: #E7E8EC;
+            --separator: rgba(60, 60, 67, 0.13);
             --text-main: #1C1C1E;
-            --text-secondary: #6E6E73;
-            --text-tertiary: #8E8E93;
-            --ios-blue: #007AFF; --ios-blue-strong: #0056b3;
+            --text-secondary: #5B5B62;
+            --text-tertiary: #8A8A90;
+            --ios-blue: #1366E8; --ios-blue-strong: #0B4FC0;
             --ios-green: #34C759;
             --shadow-soft: 0 12px 44px -10px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.06);
             --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 8px 20px -12px rgba(0,0,0,0.18);
@@ -35,22 +39,7 @@
             --spring: cubic-bezier(0.34, 1.4, 0.5, 1);
             --ease: cubic-bezier(0.32, 0.72, 0, 1);
         }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --glass-bg: rgba(30, 30, 32, 0.72);
-                --glass-border: rgba(255, 255, 255, 0.09);
-                --card-bg: rgba(44, 44, 46, 0.9);
-                --fill: #1C1C1E; --fill-2: #2C2C2E;
-                --separator: rgba(120, 120, 128, 0.32);
-                --text-main: #F5F5F7;
-                --text-secondary: #AEAEB2;
-                --text-tertiary: #8E8E93;
-                --shadow-soft: 0 12px 44px -10px rgba(0,0,0,0.7);
-                --shadow-card: 0 1px 3px rgba(0,0,0,0.5), 0 8px 20px -12px rgba(0,0,0,0.6);
-            }
-            body { background-color: #000; }
-        }
-
+        /* One consistent, polished light theme (dark mode removed for visual consistency). */
         * { -webkit-tap-highlight-color: transparent; }
         body {
             font-family: 'Heebo', -apple-system, sans-serif;
@@ -124,10 +113,10 @@
             border: none; padding: 16px; font-size: 1.08rem; font-weight: 800;
             letter-spacing: -0.01em;
             border-radius: var(--radius-lg); cursor: pointer; margin-top: 22px;
-            box-shadow: 0 8px 22px -6px rgba(255, 75, 40, 0.5), inset 0 1px 0 rgba(255,255,255,0.28);
+            box-shadow: 0 8px 22px -6px rgba(11, 87, 224, 0.45), inset 0 1px 0 rgba(255,255,255,0.28);
             transition: transform 0.18s var(--spring), box-shadow 0.2s, filter 0.2s;
         }
-        .btn-primary:hover { filter: brightness(1.04); box-shadow: 0 12px 28px -6px rgba(255,75,40,0.55), inset 0 1px 0 rgba(255,255,255,0.28); }
+        .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 12px 28px -6px rgba(11,87,224,0.5), inset 0 1px 0 rgba(255,255,255,0.28); }
         .btn-primary:active { transform: scale(0.97); }
 
         .btn-secondary {
@@ -230,12 +219,12 @@
 
         /* Population Info Box */
         #pop-info {
-            background: linear-gradient(135deg, rgba(0,122,255,0.09), rgba(88,86,214,0.09));
-            border: 1px solid rgba(0,122,255,0.18);
+            background: var(--accent-soft);
+            border: 1px solid rgba(19,102,232,0.18);
             padding: 12px 14px; border-radius: var(--radius-md); margin-top: 12px;
             font-size: 0.85rem; display: none; color: var(--text-main);
         }
-        .pop-val { font-weight: 800; color: var(--ios-blue); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+        .pop-val { font-weight: 800; color: var(--accent-strong); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 
         #pop-source-badge {
             font-size: 0.65rem; background: var(--fill-2); color: var(--text-secondary);
@@ -290,10 +279,10 @@
             padding: 7px 10px; cursor: pointer; font-weight: 600; font-family: inherit;
             transition: background 0.15s, color 0.15s, transform 0.15s var(--spring);
         }
-        #style-switcher button.active { background: #B71C1C; color: #fff; }
+        #style-switcher button.active { background: var(--accent); color: #fff; }
         #style-switcher button:hover { background: var(--fill-2); }
         #style-switcher button:active { transform: scale(0.93); }
-        #style-switcher button.active:hover { background: #a01818; }
+        #style-switcher button.active:hover { background: var(--accent-strong); }
         .mapboxgl-popup-content { font-family: 'Heebo', sans-serif; direction: rtl; }
         .mapboxgl-ctrl-scale { background: var(--glass-bg) !important; color: var(--text-main) !important; border-color: var(--separator) !important; }
         .team-member-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--separator); color: var(--text-main); }
@@ -319,12 +308,12 @@
 
 <div id="map" role="application" aria-label="מפת אזורי סיכון — תצ״א תלת-מימד"></div>
 <div id="style-switcher" role="group" aria-label="בחירת סגנון מפה">
-    <button data-style="satellite-streets-v12" class="active" aria-pressed="true" title="תצ״א עם תוויות" aria-label="תצ״א עם תוויות">תצ״א</button>
-    <button data-style="satellite-v9" aria-pressed="false" title="תצ״א נקי" aria-label="תצלום לוויין נקי">לוויין</button>
-    <button data-style="streets-v12" aria-pressed="false" title="מפת רחובות" aria-label="מפת רחובות">רחובות</button>
+    <button data-style="streets-v12" class="active" aria-pressed="true" title="מפת רחובות" aria-label="מפת רחובות">רחובות</button>
+    <button data-style="satellite-streets-v12" aria-pressed="false" title="תצ״א (לוויין + תוויות)" aria-label="תצ״א לוויין עם תוויות">תצ״א</button>
+    <button data-style="outdoors-v12" aria-pressed="false" title="מפת שטח וטופוגרפיה" aria-label="מפת שטח וטופוגרפיה">שטח</button>
     <button data-style="dark-v11" aria-pressed="false" title="מפה כהה" aria-label="מפה כהה">כהה</button>
     <button id="toggle-traffic" aria-pressed="false" title="הצג/הסתר תנועה" aria-label="הצגת שכבת תנועה">🚦 תנועה</button>
-    <button id="toggle-3d" aria-pressed="true" title="תלת-מימד / דו-מימד" aria-label="מעבר תלת-מימד או דו-מימד">🏢 3D</button>
+    <button id="toggle-3d" aria-pressed="false" title="תלת-מימד / דו-מימד" aria-label="מעבר תלת-מימד או דו-מימד">🏢 3D</button>
 </div>
 
 <div id="control-panel">
@@ -4830,9 +4819,9 @@
     let lastPacFC = null;        // cached PAC lines FeatureCollection
 
     // Mapbox style + 3D/traffic state
-    let currentStyleId = 'satellite-streets-v12';
+    let currentStyleId = 'streets-v12';
     let trafficVisible = false;
-    let is3D = true;
+    let is3D = false; // start flat (2D); user can toggle 3D on
 
     window.onload = function() {
         mapboxgl.accessToken = ['pk.eyJ', '1Ijoicm9pZXoiLCJhIjoiY21vZWhybzE3MGN0OTJ', 'xcjF3eHNka3FwaSJ9.0Fx0n1hJybefo2dZjGAxew'].join('') /* Mapbox publishable pk token, split to avoid secret-scanner false-positive; URL-restricted */
@@ -4840,9 +4829,9 @@
             container: 'map',
             style: 'mapbox://styles/mapbox/' + currentStyleId,
             center: [34.7818, 32.0853], // [lng, lat]
-            zoom: 10,
-            pitch: 55,
-            bearing: -12,
+            zoom: 11,
+            pitch: 0,
+            bearing: 0,
             antialias: true,
             preserveDrawingBuffer: true, // required for PDF/canvas capture
             cooperativeGestures: false
@@ -4945,12 +4934,13 @@
             layout: { visibility: 'none' },
             paint: {
                 'heatmap-weight': ['get', 'w'],
-                'heatmap-intensity': 1,
-                'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 10, 18, 16, 40],
-                'heatmap-opacity': 0.75,
+                'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 15, 2.4],
+                'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 24, 13, 40, 16, 70],
+                'heatmap-opacity': 0.82,
                 'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
-                    0, 'rgba(0,255,0,0)', 0.15, 'rgba(0,255,0,0.5)', 0.35, 'rgba(255,255,0,0.65)',
-                    0.55, 'rgba(255,165,0,0.75)', 0.75, 'rgba(255,0,0,0.85)', 1, 'rgba(139,0,0,0.95)']
+                    0, 'rgba(0,180,80,0)', 0.08, 'rgba(0,180,80,0.45)', 0.25, 'rgba(120,220,60,0.6)',
+                    0.45, 'rgba(255,214,0,0.72)', 0.65, 'rgba(255,140,0,0.82)', 0.82, 'rgba(240,50,30,0.9)',
+                    1, 'rgba(150,0,0,0.96)']
             }
         });
         if (!map.getLayer('lyr-protect-fill')) map.addLayer({
@@ -5003,6 +4993,9 @@
             map.on('mouseenter', 'lyr-monitor', () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', 'lyr-monitor', () => { map.getCanvas().style.cursor = isMonitoringMode ? 'crosshair' : ''; });
         }
+        // Render the concentration heat map ABOVE the ERG zone fills (so it isn't hidden),
+        // but below the PAC contour lines + detector dots.
+        if (map.getLayer('lyr-plume') && map.getLayer('lyr-pac')) map.moveLayer('lyr-plume', 'lyr-pac');
     }
 
     // Push current in-memory data back into sources after a style reload
@@ -5048,7 +5041,8 @@
             e.currentTarget.classList.toggle('active', is3D);
             e.currentTarget.setAttribute('aria-pressed', String(is3D));
         });
-        document.getElementById('toggle-3d').classList.add('active');
+        document.getElementById('toggle-3d').classList.toggle('active', is3D);
+        document.getElementById('toggle-3d').setAttribute('aria-pressed', String(is3D));
     }
 
     // ================= TEAM TRACKING (real-time) + ZONE-ENTRY ALERT =================
@@ -5429,7 +5423,7 @@ async function generatePlumePolygons() {
 
         // Feed the Mapbox heatmap layer via its GeoJSON source
         lastPlumeFC = turf.featureCollection(blendedGrid.map(p =>
-            turf.point([p.lng, p.lat], { w: Math.min(1, p.ppm / actualMaxPPM) })
+            turf.point([p.lng, p.lat], { w: Math.pow(Math.min(1, p.ppm / actualMaxPPM), 0.4) })
         ));
         setSrc('src-plume', lastPlumeFC);
         // Heavier-than-air gases hug the ground → wider heat radius
@@ -5653,12 +5647,15 @@ function drawPACIsobands(grid, maxPPM, material) {
     // ============================================================
     const legend = document.createElement('div');
     legend.id = 'pac-legend';
-    legend.style.cssText = 'position:absolute;bottom:30px;right:20px;background:rgba(255,255,255,0.93);' +
-        'padding:12px 14px;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.2);z-index:1000;' +
-        'font-size:0.82rem;min-width:160px;';
-    
-    // Heatmap color legend
-    let legendHTML = '<div style="font-weight:700;margin-bottom:8px;font-size:0.88rem;">PPM Legend</div>';
+    legend.style.cssText = 'position:absolute;bottom:24px;left:16px;background:var(--glass-bg);' +
+        'backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--glass-border);' +
+        'color:var(--text-main);padding:12px 14px;border-radius:14px;box-shadow:var(--shadow-soft);z-index:850;' +
+        'font-size:0.82rem;min-width:150px;direction:rtl;';
+
+    // Heatmap color legend + close button
+    let legendHTML = '<div style="display:flex;align-items:center;justify-content:space-between;font-weight:800;margin-bottom:8px;font-size:0.86rem;">' +
+        '<span>מקרא ריכוזים (PPM)</span>' +
+        '<button onclick="document.getElementById(\'pac-legend\').remove()" aria-label="סגור מקרא" style="border:none;background:var(--fill-2);color:var(--text-secondary);width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:0.85rem;line-height:1;">✕</button></div>';
     
     // Gradient bar
     legendHTML += '<div style="display:flex;align-items:center;margin-bottom:10px;">' +
@@ -5732,66 +5729,70 @@ function updateInfoPanel(info) {
         panel.id = 'plume-info-panel';
         panel.style.cssText = `
             position: absolute;
-            top: 120px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            max-width: 300px;
-            z-index: 1000;
-            font-size: 0.9rem;
+            top: 62px; left: 16px;
+            background: var(--glass-bg);
+            backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 14px 16px;
+            border-radius: 16px;
+            box-shadow: var(--shadow-soft);
+            width: 258px; max-height: 42vh; overflow-y: auto;
+            z-index: 900;
+            font-size: 0.85rem; line-height: 1.5;
             direction: rtl;
         `;
         document.body.appendChild(panel);
     }
     
     const modelNames = {
-        'GAUSSIAN': 'Gaussian Plume (light gas)',
-        'GAUSSIAN_INVERSE': 'Gaussian Plume — מכויל למדידות (Briggs σ, Q בריבועים פחותים)',
-        'SLAB': 'SLAB (heavy gas)',
-        'BRITTER_MCQUAID': 'Britter-McQuaid (heavy gas)'
+        'GAUSSIAN': 'תמר גאוסי',
+        'GAUSSIAN_INVERSE': 'גאוסי מכויל למדידות (Briggs σ)',
+        'SLAB': 'SLAB (גז כבד)',
+        'BRITTER_MCQUAID': 'Britter-McQuaid (גז כבד)'
     };
     if (info.model && !modelNames[info.model]) modelNames[info.model] = info.model;
-    
+    const qTxt = (typeof info.sourceQ === 'number') ? `${info.sourceQ.toExponential(1)} g/s` : '—';
+    const r2Txt = (typeof info.fitR2 === 'number') ? info.fitR2.toFixed(2) : '—';
+
     panel.innerHTML = `
-        <div style="font-weight:700;font-size:1.1rem;margin-bottom:10px;border-bottom:2px solid #667eea;padding-bottom:5px;">
-            📊 Calculation Details
+        <div style="display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:1rem;margin-bottom:10px;border-bottom:1px solid var(--separator);padding-bottom:8px;">
+            <span>📊 פרטי החישוב</span>
+            <button onclick="document.getElementById('plume-info-panel').style.display='none'" aria-label="סגור" style="border:none;background:var(--fill-2);color:var(--text-secondary);width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:0.9rem;line-height:1;">✕</button>
+        </div>
+
+        <div style="margin:8px 0;">
+            <strong>חומר:</strong> ${info.material.nameHe}<br>
+            <span style="font-size:0.8rem;color:var(--text-secondary);">MW ${info.material.mw} · ρ ${info.material.density_gas.toFixed(2)}</span>
+        </div>
+
+        <div style="margin:8px 0;padding:9px 10px;background:var(--fill);border-radius:9px;">
+            <strong>מודל פיזור:</strong><br>${modelNames[info.model]}<br>
+            <span style="font-size:0.8rem;color:var(--text-secondary);">עוצמת מקור Q ≈ ${qTxt} · התאמה R² ${r2Txt}</span>
         </div>
         
         <div style="margin:8px 0;">
-            <strong>Material:</strong> ${info.material.nameEn || info.material.nameHe}<br>
-            <span style="font-size:0.85rem;color:#666;">MW: ${info.material.mw} | ρ: ${info.material.density_gas.toFixed(2)}</span>
-        </div>
-        
-        <div style="margin:8px 0;padding:8px;background:#f0f0f0;border-radius:5px;">
-            <strong>Physics Model:</strong><br>
-            ${modelNames[info.model]}
-        </div>
-        
-        <div style="margin:8px 0;">
-            <strong>🌡️ Weather:</strong><br>
-            <span style="font-size:0.85rem;">
-            Temp: ${info.meteo.temperature.toFixed(1)}°C<br>
-            Wind: ${info.meteo.windSpeed.toFixed(1)} m/s @ ${info.meteo.windDirection}°<br>
-            Stability: Pasquill-${info.stability}
+            <strong>🌡️ מזג אוויר:</strong><br>
+            <span style="font-size:0.82rem;color:var(--text-secondary);">
+            טמפ' ${info.meteo.temperature.toFixed(1)}°C · רוח ${info.meteo.windSpeed.toFixed(1)} מ/ש @ ${info.meteo.windDirection}°<br>
+            יציבות Pasquill-${info.stability}
             </span>
         </div>
-        
+
         <div style="margin:8px 0;">
-            <strong>🏙️ Terrain:</strong><br>
-            <span style="font-size:0.85rem;">
-            ${info.terrain.description}<br>
-            z₀ = ${info.terrain.roughness.toFixed(2)} m
+            <strong>🏙️ שטח:</strong><br>
+            <span style="font-size:0.82rem;color:var(--text-secondary);">
+            ${info.terrain.description} · z₀ = ${info.terrain.roughness.toFixed(2)} מ'
             </span>
         </div>
         
 
         
-        <div style="margin-top:10px;font-size:0.75rem;color:#666;border-top:1px solid #ddd;padding-top:8px;">
-            Based on: measurements + physics model + real-time data
+        <div style="margin-top:10px;font-size:0.72rem;color:var(--text-tertiary);border-top:1px solid var(--separator);padding-top:8px;">
+            מבוסס: מדידות + מודל פיזיקלי + נתונים בזמן אמת
         </div>
     `;
+    panel.style.display = 'block';
 }
 
     function clearHeatmap() {
@@ -5803,6 +5804,8 @@ function updateInfoPanel(info) {
         setSrc('src-pac', turf.featureCollection([]));
         const oldLegend = document.getElementById('pac-legend');
         if (oldLegend) oldLegend.remove();
+        const infoP = document.getElementById('plume-info-panel');
+        if (infoP) infoP.style.display = 'none';
         monitoringFeatures = [];
         setSrc('src-monitor', turf.featureCollection([]));
     }
