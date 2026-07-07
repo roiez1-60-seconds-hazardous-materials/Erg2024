@@ -95,6 +95,7 @@
             display: flex; align-items: center;
         }
         .row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .field-label { display: block; font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 5px; }
 
         .tool-btn {
             flex: 1; background: var(--card-bg); color: var(--ios-blue-strong);
@@ -352,12 +353,12 @@
     <div class="section-label"><span class="sl-icon" aria-hidden="true">⚠️</span>נתוני אירוע</div>
     <div class="row">
         <select id="spillSize" onchange="checkTable3Visibility()" aria-label="גודל השפך">
-            <option value="small">שפך מועט (קטן)</option>
-            <option value="large">שפך רב (גדול)</option>
+            <option value="small">💧 שפך מועט (קטן)</option>
+            <option value="large">🛢️ שפך רב (גדול)</option>
         </select>
         <select id="timeDay" aria-label="שעת האירוע — יום או לילה">
-            <option value="day">יום</option>
-            <option value="night">לילה</option>
+            <option value="day">☀️ יום</option>
+            <option value="night">🌙 לילה</option>
         </select>
     </div>
 
@@ -371,12 +372,15 @@
     </div>
 
     <div id="table3-options" class="special-options">
-        <div style="font-weight:700; font-size:0.8rem; margin-bottom:5px; color:#FF9500;">אופציות טבלה 3 (גזים רעילים בשפך רב)</div>
-        <select id="containerType"></select>
-        <select id="windSpeed">
-            <option value="low">רוח חרישית (עד 3 מטר/שניה)</option>
-            <option value="medium">רוח קלה (3-6 מטר/שניה)</option>
-            <option value="high">רוח מתונה ומעלה (מעל 6 מטר/שניה)</option>
+        <div style="font-weight:700; font-size:0.8rem; margin-bottom:8px; color:var(--orange);">אופציות טבלה 3 (גזים רעילים בשפך רב)</div>
+        <label class="field-label" for="containerType">🚛 סוג המכל</label>
+        <select id="containerType" aria-label="סוג המכל"></select>
+        <div style="height:1px;background:var(--separator);margin:10px 0;"></div>
+        <label class="field-label" for="windSpeed">💨 מהירות רוח</label>
+        <select id="windSpeed" aria-label="מהירות רוח">
+            <option value="low">🍃 רוח חרישית (עד 3 מ/ש)</option>
+            <option value="medium">🌬️ רוח קלה (3-6 מ/ש)</option>
+            <option value="high">💨 רוח מתונה ומעלה (מעל 6 מ/ש)</option>
         </select>
     </div>
 
@@ -428,9 +432,9 @@
     <div id="team-panel">
         <div id="team-join">
             <input type="text" id="team-name" placeholder="שם / כינוי" autocomplete="off" aria-label="שם איש צוות" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid #ddd; border-radius:8px; font-family:inherit; font-size:0.85rem;">
-            <input type="text" id="team-room" placeholder="מפתח חדר משותף (למשל: incident-42)" autocomplete="off" aria-label="מפתח חדר" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid #ddd; border-radius:8px; font-family:inherit; font-size:0.85rem;">
+            <input type="text" id="team-room" placeholder="אות קשר משותף (למשל: אירוע-42)" autocomplete="off" aria-label="אות קשר" style="width:100%; padding:7px; margin-bottom:6px; border:1px solid var(--separator); border-radius:8px; font-family:inherit; font-size:0.85rem; background:var(--fill); color:var(--text-main);">
             <button id="btn-team-join" class="tool-btn" style="width:100%" onclick="teamJoin()">🔗 הצטרף ושתף מיקום</button>
-            <div style="font-size:0.68rem; color:var(--text-secondary); margin-top:5px; line-height:1.4;">🔒 ערוץ פרטי (Supabase Realtime) לפי מפתח-חדר — שתף את המפתח רק עם הצוות. (אם Supabase לא זמין, יש גיבוי אוטומטי לערוץ לייט.)</div>
+            <div style="font-size:0.68rem; color:var(--text-secondary); margin-top:5px; line-height:1.4;">🔒 ערוץ פרטי (Supabase Realtime) לפי אות-קשר — שתף את אות-הקשר רק עם הצוות. (אם Supabase לא זמין, יש גיבוי אוטומטי לערוץ לייט.)</div>
         </div>
         <div id="team-active" style="display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -5136,7 +5140,7 @@
     function teamJoin() {
         const name = (document.getElementById('team-name').value || '').trim();
         const room = (document.getElementById('team-room').value || '').trim();
-        if (!name || !room) { alert('נא למלא שם ומפתח חדר'); return; }
+        if (!name || !room) { alert('נא למלא שם ואות קשר'); return; }
         TEAM.meName = name; TEAM.room = room;
         TEAM.meId = 'u' + Math.random().toString(36).slice(2, 9);
         const useSupabase = (typeof supabase !== 'undefined') && TEAM_SUPABASE_ANON && TEAM_SUPABASE_ANON.length > 20;
@@ -5411,13 +5415,13 @@ async function generatePlumePolygons() {
         // Step 6: Create heatmap
         updateStatus('יוצר מפת חום...');
         
-        // חשב maxPPM מתוך הblendedGrid הסופי (כולל נקודות מדידה)
-        // Cap at 1,000,000 PPM — physically no gas can exceed this
-        const rawMaxPPM = Math.max(...blendedGrid.map(p => p.ppm), 0.001);
-        const actualMaxPPM = Math.min(rawMaxPPM, 1000000);
-
-        // Also cap individual grid points for legend accuracy
-        blendedGrid.forEach(p => { if (p.ppm > 1000000) p.ppm = 1000000; });
+        // Bound the field to the MEASURED range. The Gaussian point-source model is singular
+        // at the source (C→∞ as x→0) and its near-field is invalid, which produced absurd
+        // peaks (e.g. 700k PPM) far above the detector readings. We do NOT extrapolate above
+        // the highest measured concentration — the map/legend show 0 .. max(measured).
+        const maxMeasured = Math.max(...monitoringFeatures.map(m => m.properties.intensity), 1);
+        const actualMaxPPM = maxMeasured;
+        blendedGrid.forEach(p => { if (p.ppm > maxMeasured) p.ppm = maxMeasured; });
 
         const isHeavy = selectedMat.density_gas > 1.2;
 
@@ -5934,9 +5938,18 @@ function updateInfoPanel(info) {
             t3Div.style.display = 'block';
             containerSel.innerHTML = '';
             const data = table3Data[selectedMat.un];
+            const iconFor = (label) => {
+                const s = String(label);
+                if (/רכבת|קרון|rail/i.test(s)) return '🚃';
+                if (/משאי|מכלית|טנקר|truck|trailer|כביש/i.test(s)) return '🚛';
+                if (/צינור|pipe|קו/i.test(s)) return '🚰';
+                if (/גליל|בלון|cylinder|טון|ton/i.test(s)) return '🛢️';
+                if (/ספינה|אני|ship|barge/i.test(s)) return '🚢';
+                return '📦';
+            };
             for (const key in data) {
                 const opt = document.createElement('option');
-                opt.value = key; opt.innerText = data[key].label;
+                opt.value = key; opt.innerText = iconFor(data[key].label) + ' ' + data[key].label;
                 containerSel.appendChild(opt);
             }
         } else { t3Div.style.display = 'none'; }
