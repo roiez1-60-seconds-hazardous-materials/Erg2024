@@ -112,7 +112,7 @@
         .btn-primary {
             width: 100%; background: var(--primary-gradient); color: white;
             border: none; padding: 16px; font-size: 1.08rem; font-weight: 800;
-            letter-spacing: -0.01em;
+            letter-spacing: -0.01em; text-align: center; display: block;
             border-radius: var(--radius-lg); cursor: pointer; margin-top: 22px;
             box-shadow: 0 8px 22px -6px rgba(11, 87, 224, 0.45), inset 0 1px 0 rgba(255,255,255,0.28);
             transition: transform 0.18s var(--spring), box-shadow 0.2s, filter 0.2s;
@@ -5415,19 +5415,25 @@ async function generatePlumePolygons() {
         // Step 6: Create heatmap
         updateStatus('יוצר מפת חום...');
         
-        // Bound the field to the MEASURED range. The Gaussian point-source model is singular
-        // at the source (C→∞ as x→0) and its near-field is invalid, which produced absurd
-        // peaks (e.g. 700k PPM) far above the detector readings. We do NOT extrapolate above
-        // the highest measured concentration — the map/legend show 0 .. max(measured).
-        const maxMeasured = Math.max(...monitoringFeatures.map(m => m.properties.intensity), 1);
-        const actualMaxPPM = maxMeasured;
-        blendedGrid.forEach(p => { if (p.ppm > maxMeasured) p.ppm = maxMeasured; });
-
+        // Color the heat map by PAC EXPOSURE LEVEL (PAC-1/2/3), not raw magnitude. This makes
+        // the legend read in meaningful exposure terms, and the singular near-field simply
+        // shows as "≥ PAC-3" (red) instead of absurd numbers like 700k PPM.
+        const pac1 = selectedMat.pac1 || (selectedMat.idlh ? selectedMat.idlh * 0.001 : 0.5);
+        const pac2 = selectedMat.pac2 || (selectedMat.idlh ? selectedMat.idlh * 0.05 : 5);
+        const pac3 = selectedMat.pac3 || (selectedMat.idlh ? selectedMat.idlh * 0.5 : 50);
+        const actualMaxPPM = pac3; // heat scale normalized to PAC-3 (top hazard threshold)
+        const pacWeight = (ppm) => {
+            if (ppm >= pac3) return 1;
+            if (ppm >= pac2) return 0.66 + 0.34 * (ppm - pac2) / (pac3 - pac2);
+            if (ppm >= pac1) return 0.33 + 0.33 * (ppm - pac1) / (pac2 - pac1);
+            if (ppm > 0)     return 0.06 + 0.27 * (ppm / pac1);
+            return 0;
+        };
         const isHeavy = selectedMat.density_gas > 1.2;
 
-        // Feed the Mapbox heatmap layer via its GeoJSON source
+        // Feed the Mapbox heatmap layer, weighting each cell by its PAC band
         lastPlumeFC = turf.featureCollection(blendedGrid.map(p =>
-            turf.point([p.lng, p.lat], { w: Math.pow(Math.min(1, p.ppm / actualMaxPPM), 0.4) })
+            turf.point([p.lng, p.lat], { w: pacWeight(p.ppm) })
         ));
         setSrc('src-plume', lastPlumeFC);
         // Heavier-than-air gases hug the ground → wider heat radius
@@ -5656,35 +5662,25 @@ function drawPACIsobands(grid, maxPPM, material) {
         'color:var(--text-main);padding:12px 14px;border-radius:14px;box-shadow:var(--shadow-soft);z-index:850;' +
         'font-size:0.82rem;min-width:150px;direction:rtl;';
 
-    // Heatmap color legend + close button
-    let legendHTML = '<div style="display:flex;align-items:center;justify-content:space-between;font-weight:800;margin-bottom:8px;font-size:0.86rem;">' +
-        '<span>מקרא ריכוזים (PPM)</span>' +
+    // Legend keyed to PAC exposure levels (the values that matter operationally)
+    const fmt = v => v >= 1 ? v.toFixed(0) : v.toFixed(2);
+    let legendHTML = '<div style="display:flex;align-items:center;justify-content:space-between;font-weight:800;margin-bottom:10px;font-size:0.85rem;">' +
+        '<span>רמות חשיפה (PAC)</span>' +
         '<button onclick="document.getElementById(\'pac-legend\').remove()" aria-label="סגור מקרא" style="border:none;background:var(--fill-2);color:var(--text-secondary);width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:0.85rem;line-height:1;">✕</button></div>';
-    
-    // Gradient bar
-    legendHTML += '<div style="display:flex;align-items:center;margin-bottom:10px;">' +
-        '<div style="width:16px;height:100px;background:linear-gradient(to top, rgba(0,255,0,0.5) 0%, rgba(255,255,0,0.65) 30%, rgba(255,165,0,0.75) 55%, rgba(255,0,0,0.85) 75%, rgba(139,0,0,0.95) 100%);' +
-        'border-radius:3px;border:1px solid #ccc;"></div>' +
-        '<div style="display:flex;flex-direction:column;justify-content:space-between;height:100px;margin-left:8px;color:#333;">' +
-        '<span>' + maxPPM.toFixed(0) + ' PPM</span>' +
-        '<span style="font-size:0.75rem;color:#666;">' + (maxPPM*0.5).toFixed(0) + '</span>' +
-        '<span>0 PPM</span>' +
-        '</div></div>';
-    
-    // PAC lines legend
-    legendHTML += '<div style="border-top:1px solid #ddd;padding-top:8px;margin-top:4px;">' +
-        '<div style="font-weight:600;margin-bottom:5px;font-size:0.82rem;">PAC Isobands</div>';
-    
-    pacConfigs.forEach(pac => {
-        if (pac.threshold > maxPPM) return;
-        legendHTML += '<div style="display:flex;align-items:center;margin:3px 0;">' +
-            '<svg width="28" height="10" style="margin-right:6px;">' +
-            '<line x1="0" y1="5" x2="28" y2="5" stroke="' + pac.color + '" stroke-width="2.5" stroke-dasharray="' + pac.dashArray + '"/>' +
-            '</svg>' +
-            '<span style="color:#333;">' + pac.name + ' (' + pac.threshold.toFixed(1) + ' PPM)</span></div>';
+
+    const bands = [
+        { c: '#B3261E', t: 'מעל PAC-3', v: pacValues.PAC3, d: 'סכנת חיים / פגיעה חמורה' },
+        { c: '#FF8C00', t: 'PAC-2', v: pacValues.PAC2, d: 'נזק בריאותי בלתי-הפיך' },
+        { c: '#F2C200', t: 'PAC-1', v: pacValues.PAC1, d: 'אי-נוחות ניכרת' },
+        { c: '#46C86E', t: 'מתחת ל-PAC-1', v: 0, d: 'בטוח יחסית' }
+    ];
+    bands.forEach(b => {
+        legendHTML += '<div style="display:flex;align-items:center;gap:8px;margin:6px 0;">' +
+            '<span style="width:16px;height:16px;border-radius:4px;flex-shrink:0;background:' + b.c + ';border:1px solid rgba(0,0,0,0.1);"></span>' +
+            '<span style="line-height:1.25;"><b>' + b.t + '</b>' + (b.v ? ' · ' + fmt(b.v) + ' PPM' : '') +
+            '<br><span style="font-size:0.7rem;color:var(--text-secondary);">' + b.d + '</span></span></div>';
     });
-    
-    legendHTML += '</div></div>';
+    legendHTML += '<div style="margin-top:8px;font-size:0.66rem;color:var(--text-tertiary);border-top:1px solid var(--separator);padding-top:6px;">הקווים המקווקווים = גבולות PAC מדויקים לחומר זה</div>';
     legend.innerHTML = legendHTML;
     document.body.appendChild(legend);
 }
